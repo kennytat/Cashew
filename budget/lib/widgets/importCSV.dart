@@ -583,14 +583,7 @@ class _ImportCSVState extends State<ImportCSV> {
   }
 
   Future<String?> fetchDataFromCsvUrl(String? csvUrl) async {
-    if (csvUrl == null) throw ("URL Parsing error.");
-    final response = await http.get(Uri.parse(csvUrl));
-    if (response.statusCode == 200) {
-      String data = response.body;
-      return data;
-    } else {
-      throw ("HTTP Request failed with status code: ${response.statusCode}");
-    }
+    throw ("从URL导入CSV功能已被禁用");
   }
 
   @override
@@ -627,31 +620,6 @@ class _ImportCSVState extends State<ImportCSV> {
               text: "template".tr(),
             );
           }),
-        ),
-        SettingsContainer(
-          onTap: () async {
-            await _enterGoogleSheetURL();
-          },
-          title: "import-google-sheet".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.table_chart_outlined
-              : Icons.table_chart_rounded,
-          afterWidget: LowKeyButton(
-            onTap: () async {
-              getGoogleSheetTemplate(context);
-            },
-            extraWidget: Padding(
-              padding: const EdgeInsetsDirectional.only(start: 4),
-              child: Icon(
-                appStateSettings["outlinedIcons"]
-                    ? Icons.open_in_new_outlined
-                    : Icons.open_in_new_rounded,
-                size: 18,
-                color: getColor(context, "black").withOpacity(0.5),
-              ),
-            ),
-            text: "template".tr(),
-          ),
         ),
       ],
     );

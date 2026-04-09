@@ -122,12 +122,10 @@ class NavigationSidebarState extends State<NavigationSidebar> {
             padding: EdgeInsetsDirectional.only(
                 start: MediaQuery.viewPaddingOf(context).left),
             child: IgnorePointer(
-              ignoring: appStateSettings["hasOnboarded"] == false ||
-                  lockAppWaitForRestart == true,
+              ignoring: lockAppWaitForRestart == true,
               child: AnimatedOpacity(
                 duration: Duration(milliseconds: 500),
-                opacity: appStateSettings["hasOnboarded"] == false ||
-                        lockAppWaitForRestart == true
+                opacity: lockAppWaitForRestart == true
                     ? 0.3
                     : 1,
                 child: SingleChildScrollView(
@@ -303,16 +301,8 @@ class NavigationSidebarState extends State<NavigationSidebar> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               SizedBox(height: 40),
-                              GoogleAccountLoginButton(
-                                navigationSidebarButton: true,
-                                isButtonSelected: selectedIndex == 8,
-                              ),
                               NavigationSidebarButtonWithNavBarIconData(
                                 navBarIconDataKey: "settings",
-                                currentPageIndex: selectedIndex,
-                              ),
-                              NavigationSidebarButtonWithNavBarIconData(
-                                navBarIconDataKey: "about",
                                 currentPageIndex: selectedIndex,
                               ),
                               SyncButton(),

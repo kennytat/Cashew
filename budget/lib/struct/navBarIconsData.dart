@@ -156,7 +156,7 @@ Map<String, NavBarIconData> getNavBarIconsData() {
           : Icons.savings_rounded,
       label: "goals",
       labelLong: "goals-details",
-      navigationIndexedStackIndex: 15,
+      navigationIndexedStackIndex: 18,
     ),
   };
 }

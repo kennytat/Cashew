@@ -1,38 +1,39 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:budget/colors.dart';
+
 import 'package:budget/database/tables.dart';
+import 'package:budget/functions.dart';
 import 'package:budget/pages/addEmailTemplate.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/editCategoriesPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/notificationsGlobal.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/accountAndBackup.dart';
 import 'package:budget/widgets/button.dart';
-import 'package:budget/widgets/categoryIcon.dart';
+import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/navigationFramework.dart';
+import 'package:budget/widgets/notificationsSettings.dart';
 import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
-import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/statusBox.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
-import 'package:budget/widgets/util/appLinks.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:budget/functions.dart';
-import 'package:googleapis/gmail/v1.dart' as gMail;
-import 'package:html/parser.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
+import 'package:provider/provider.dart';
 
 import 'addButton.dart';
 
 StreamSubscription<ServiceNotificationEvent>? notificationListenerSubscription;
+// 限制捕获的通知数量，避免内存占用过大
+final int maxCapturedNotifications = 20;
 List<String> recentCapturedNotifications = [];
 
 Future initNotificationScanning() async {
@@ -40,27 +41,48 @@ Future initNotificationScanning() async {
   notificationListenerSubscription?.cancel();
   if (appStateSettings["notificationScanning"] != true) return;
 
-  bool status = await requestReadNotificationPermission();
-
+  // 检查权限是否已经授予
+  bool status = await NotificationListenerService.isPermissionGranted();
   if (status == true) {
     notificationListenerSubscription =
         NotificationListenerService.notificationsStream.listen(onNotification);
+  } else {
+    // 如果设置为true但实际没有权限，自动将设置更新为false
+    await updateSettings("notificationScanning", false,
+        updateGlobalState: false);
   }
 }
 
 Future<bool> requestReadNotificationPermission() async {
   bool status = await NotificationListenerService.isPermissionGranted();
   if (status != true) {
-    status = await NotificationListenerService.requestPermission();
+    // 请求权限，用户可能会被引导到系统设置页面
+    // 当用户从系统设置页面返回时，重新检查权限状态
+    await NotificationListenerService.requestPermission();
+    // 重新检查权限状态，因为用户可能在系统设置中手动授予或拒绝了权限
+    // 即使权限请求被取消或用户点击返回，也需要重新检查当前的权限状态
+    status = await NotificationListenerService.isPermissionGranted();
   }
   return status;
 }
 
 onNotification(ServiceNotificationEvent event) async {
+  // 过滤掉自己应用的通知，避免循环监听
+  if (event.packageName == "com.budget.tracker_app") return;
+
+  // 过滤掉已移除的通知，避免重复处理
+  if (event.hasRemoved == true) return;
+
   String messageString = getNotificationMessage(event);
+  // 添加新的通知到列表开头
   recentCapturedNotifications.insert(0, messageString);
-  recentCapturedNotifications.take(50);
-  queueTransactionFromMessage(messageString);
+  // 限制列表大小，避免内存占用过大
+  if (recentCapturedNotifications.length > maxCapturedNotifications) {
+    recentCapturedNotifications =
+        recentCapturedNotifications.sublist(0, maxCapturedNotifications);
+  }
+  // 设置willPushRoute为true，恢复跳转到添加交易页面的逻辑
+  queueTransactionFromMessage(messageString, willPushRoute: true);
 }
 
 class InitializeNotificationService extends StatefulWidget {
@@ -88,6 +110,10 @@ class _InitializeNotificationServiceState
   }
 }
 
+// 用于跟踪最近的通知，防止重复
+// 使用更可靠的唯一标识符，包含秒数和更详细的消息特征
+Map<String, DateTime> _recentNotifications = {};
+
 Future queueTransactionFromMessage(String messageString,
     {bool willPushRoute = true, DateTime? dateTime}) async {
   String? title;
@@ -96,13 +122,20 @@ Future queueTransactionFromMessage(String messageString,
       await database.getAllScannerTemplates();
   ScannerTemplate? templateFound;
 
+  // 第一步：快速扫描模板并获取金额
   for (ScannerTemplate scannerTemplate in scannerTemplates) {
     if (messageString.contains(scannerTemplate.contains)) {
       templateFound = scannerTemplate;
-      title = getTransactionTitleFromEmail(
-          messageString,
-          scannerTemplate.titleTransactionBefore,
-          scannerTemplate.titleTransactionAfter);
+
+      // 如果是新模式（auto），不需要获取标题，只需要获取金额
+      if (scannerTemplate.amountTransactionBefore != "auto" ||
+          scannerTemplate.amountTransactionAfter != "auto") {
+        title = getTransactionTitleFromEmail(
+            messageString,
+            scannerTemplate.titleTransactionBefore,
+            scannerTemplate.titleTransactionAfter);
+      }
+
       amountDouble = getTransactionAmountFromEmail(
           messageString,
           scannerTemplate.amountTransactionBefore,
@@ -111,49 +144,106 @@ Future queueTransactionFromMessage(String messageString,
     }
   }
 
-  if (templateFound == null) return false;
+  if (templateFound == null || amountDouble == null) return false;
 
-  //if (amountDouble == null) amountDouble = getAmountFromString(title ?? "");
-  // We don't need this line, we can still queue up a transaction without these details,
-  // however maybe the user doesn't want to queue it up if its missing details?
-  if (amountDouble == null || title == null) return false;
+  // 提取消息的关键特征，用于生成更可靠的唯一标识符
+  // 1. 提取消息的哈希值，考虑整个消息内容
+  int messageHash = messageString.hashCode;
+  // 2. 使用完整的时间戳（包括秒），而不仅仅是分钟
+  String timestamp =
+      DateTime.now().toString().substring(0, 19); // 格式：YYYY-MM-DD HH:mm:ss
 
-  TransactionCategory? category;
-  TransactionAssociatedTitleWithCategory? foundTitle =
-      (await database.getSimilarAssociatedTitles(title: title, limit: 1))
-          .firstOrNull;
-  category = foundTitle?.category;
-  if (category == null) {
-    category = await database
-        .getCategoryInstanceOrNull(templateFound.defaultCategoryFk);
+  // 生成唯一标识符用于防止重复通知
+  // 包含：模板ID、金额、消息哈希和时间戳（精确到秒）
+  String notificationId =
+      "${templateFound.scannerTemplatePk}_${amountDouble.toStringAsFixed(2)}_${messageHash}_${timestamp.substring(11, 19)}";
+  DateTime now = DateTime.now();
+
+  // 清除旧的通知记录，延长到10分钟，减少重复的可能性
+  // 10分钟足够覆盖同一笔交易可能产生的所有相关通知
+  _recentNotifications
+      .removeWhere((key, value) => now.difference(value).inMinutes > 10);
+
+  // 检查是否在短时间内发送过相同的通知
+  if (_recentNotifications.containsKey(notificationId)) {
+    print("跳过重复通知：$notificationId");
+    if (willPushRoute) {
+      // 直接获取类别和钱包信息并跳转
+      TransactionCategory? category;
+      TransactionWallet? wallet = templateFound.walletFk == "-1"
+          ? null
+          : await database.getWalletInstanceOrNull(templateFound.walletFk);
+
+      if (title != null) {
+        TransactionAssociatedTitleWithCategory? foundTitle =
+            (await database.getSimilarAssociatedTitles(title: title, limit: 1))
+                .firstOrNull;
+        category = foundTitle?.category;
+      }
+
+      if (category == null) {
+        category = await database
+            .getCategoryInstanceOrNull(templateFound.defaultCategoryFk);
+      }
+
+      pushRoute(
+        null,
+        AddTransactionPage(
+          useCategorySelectedIncome: true,
+          routesToPopAfterDelete: RoutesToPopAfterDelete.None,
+          selectedAmount: amountDouble,
+          selectedTitle: title,
+          selectedCategory: category,
+          startInitialAddTransactionSequence: false,
+          selectedWallet: wallet,
+          selectedDate: dateTime,
+        ),
+      );
+    }
+    return;
   }
 
-  TransactionWallet? wallet = templateFound.walletFk == "-1"
-      ? null
-      : await database.getWalletInstanceOrNull(templateFound.walletFk);
+  // 立即发送通知，不等待后续的数据库查询
+  if (!kIsWeb) {
+    bool notificationsEnabled = await checkNotificationsPermissionAll();
+    if (notificationsEnabled) {
+      // 发送本地通知
+      AndroidNotificationDetails androidNotificationDetails =
+          AndroidNotificationDetails(
+        'transaction_scan_channel',
+        'transaction_scan_channel',
+        channelDescription: '通知扫描交易',
+        importance: Importance.max,
+        priority: Priority.high,
+        ticker: 'ticker',
+      );
+      DarwinNotificationDetails darwinNotificationDetails =
+          DarwinNotificationDetails();
+      NotificationDetails notificationDetails = NotificationDetails(
+        android: androidNotificationDetails,
+        iOS: darwinNotificationDetails,
+      );
 
-  if (willPushRoute) {
-    pushRoute(
-      null,
-      AddTransactionPage(
-        useCategorySelectedIncome: true,
-        routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-        selectedAmount: amountDouble,
-        selectedTitle: title,
-        selectedCategory: category,
-        startInitialAddTransactionSequence: false,
-        selectedWallet: wallet,
-        selectedDate: dateTime,
-      ),
-    );
-  } else {
-    processAddTransactionFromParams(navigatorKey.currentContext!, {
-      "title": title,
-      "categoryPk": category?.categoryPk,
-      "walletPk": wallet?.walletPk,
-      "amount": amountDouble.toString(),
-      "date": dateTime.toString(),
-    });
+      // 记录此通知，防止重复
+      _recentNotifications[notificationId] = now;
+
+      // 使用notificationId的哈希值作为通知标识符，确保唯一性且长度适中
+      int notificationIdentifier = notificationId.hashCode.abs();
+
+      await flutterLocalNotificationsPlugin.show(
+        notificationIdentifier,
+        '检测到交易信息',
+        '发现一笔金额为${amountDouble.toStringAsFixed(2)}的交易，点击添加',
+        notificationDetails,
+        payload: jsonEncode({
+          "type": "addTransaction",
+          "amount": amountDouble.toString(),
+          "templatePk": templateFound.scannerTemplatePk,
+          "title": title,
+          "date": dateTime?.toString()
+        }),
+      );
+    }
   }
 }
 
@@ -168,18 +258,15 @@ String getNotificationMessage(ServiceNotificationEvent event) {
   return output;
 }
 
-class AutoTransactionsPageNotifications extends StatefulWidget {
-  const AutoTransactionsPageNotifications({Key? key}) : super(key: key);
+class AutoTransactionsPageEmail extends StatefulWidget {
+  const AutoTransactionsPageEmail({Key? key}) : super(key: key);
 
   @override
-  State<AutoTransactionsPageNotifications> createState() =>
-      _AutoTransactionsPageNotificationsState();
+  State<AutoTransactionsPageEmail> createState() =>
+      _AutoTransactionsPageEmailState();
 }
 
-class _AutoTransactionsPageNotificationsState
-    extends State<AutoTransactionsPageNotifications> {
-  bool canReadEmails = true;
-
+class _AutoTransactionsPageEmailState extends State<AutoTransactionsPageEmail> {
   @override
   void initState() {
     super.initState();
@@ -189,7 +276,7 @@ class _AutoTransactionsPageNotificationsState
   Widget build(BuildContext context) {
     return PageFramework(
       dragDownToDismiss: true,
-      title: "Auto Transactions",
+      title: "auto-transactions-title".tr(),
       actions: [
         RefreshButton(
           timeout: Duration.zero,
@@ -205,31 +292,30 @@ class _AutoTransactionsPageNotificationsState
           padding:
               const EdgeInsetsDirectional.only(bottom: 5, start: 20, end: 20),
           child: TextFont(
-            text:
-                "Transactions can be created automatically based on your notifications.",
+            text: "transactions-created-based-notifications".tr(),
             fontSize: 14,
             maxLines: 10,
           ),
         ),
         SettingsContainerSwitch(
           onSwitched: (value) async {
-            await updateSettings("notificationScanning", value,
-                updateGlobalState: false);
             if (value == true) {
+              // 先请求权限，只有权限授予后才更新设置
               bool status = await requestReadNotificationPermission();
-              if (status == false) {
-                await updateSettings("notificationScanning", false,
+              if (status == true) {
+                await updateSettings("notificationScanning", true,
                     updateGlobalState: false);
-              } else {
                 initNotificationScanning();
               }
+              // 如果权限被拒绝，不更新设置，保持为false
             } else {
+              await updateSettings("notificationScanning", false,
+                  updateGlobalState: false);
               notificationListenerSubscription?.cancel();
             }
           },
-          title: "Notification Transactions",
-          description:
-              "When a notification is dismissed and the app is open, attempt to add a transaction given its information. Create a template so Cashew understands the format of a notification.",
+          title: "notification-transactions".tr(),
+          description: "notification-transactions-description".tr(),
           initialValue: appStateSettings["notificationScanning"],
         ),
         StreamBuilder<List<ScannerTemplate>>(
@@ -240,8 +326,8 @@ class _AutoTransactionsPageNotificationsState
                 return Padding(
                   padding: const EdgeInsetsDirectional.all(5),
                   child: StatusBox(
-                    title: "Notification Configuration Missing",
-                    description: "Please add a configuration.",
+                    title: "notification-configuration-missing".tr(),
+                    description: "please-add-configuration".tr(),
                     icon: appStateSettings["outlinedIcons"]
                         ? Icons.warning_outlined
                         : Icons.warning_rounded,
@@ -286,326 +372,22 @@ class _AutoTransactionsPageNotificationsState
             );
           },
         ),
-        EmailsList(
-          messagesList: recentCapturedNotifications,
-        ),
-      ],
-    );
-  }
-}
-
-class AutoTransactionsPageEmail extends StatefulWidget {
-  const AutoTransactionsPageEmail({Key? key}) : super(key: key);
-
-  @override
-  State<AutoTransactionsPageEmail> createState() =>
-      _AutoTransactionsPageEmailState();
-}
-
-class _AutoTransactionsPageEmailState extends State<AutoTransactionsPageEmail> {
-  bool canReadEmails =
-      appStateSettings["AutoTransactions-canReadEmails"] ?? false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration.zero, () async {
-      if (canReadEmails == true && googleUser == null) {
-        await signInGoogle(
-            context: context, waitForCompletion: true, gMailPermissions: true);
-        updateSettings("AutoTransactions-canReadEmails", true,
-            pagesNeedingRefresh: [3], updateGlobalState: false);
-        setState(() {});
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PageFramework(
-      dragDownToDismiss: true,
-      title: "Auto Transactions",
-      actions: [
-        RefreshButton(onTap: () async {
-          loadingIndeterminateKey.currentState?.setVisibility(true);
-          await parseEmailsInBackground(context,
-              sayUpdates: true, forceParse: true);
-          loadingIndeterminateKey.currentState?.setVisibility(false);
-        }),
-      ],
-      listWidgets: [
-        Padding(
-          padding:
-              const EdgeInsetsDirectional.only(bottom: 5, start: 20, end: 20),
-          child: TextFont(
-            text:
-                "Transactions can be created automatically based on your emails. This can be useful when you get emails from your bank, and you want to automatically add these transactions.",
-            fontSize: 14,
-            maxLines: 10,
-          ),
-        ),
         SettingsContainerSwitch(
           onSwitched: (value) async {
-            if (value == true) {
-              bool result = await signInGoogle(
-                  context: context,
-                  waitForCompletion: true,
-                  gMailPermissions: true);
-              if (result == false) {
-                return false;
-              }
-              setState(() {
-                canReadEmails = true;
-              });
-              updateSettings("AutoTransactions-canReadEmails", true,
-                  pagesNeedingRefresh: [3], updateGlobalState: false);
-            } else {
-              setState(() {
-                canReadEmails = false;
-              });
-              updateSettings("AutoTransactions-canReadEmails", false,
-                  updateGlobalState: false, pagesNeedingRefresh: [3]);
-            }
+            await updateSettings("notificationShowCapturedData", value,
+                updateGlobalState: false);
           },
-          title: "Read Emails",
-          description:
-              "Parse Gmail emails on app launch. Every email is only scanned once.",
-          initialValue: canReadEmails,
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.mark_email_unread_outlined
-              : Icons.mark_email_unread_rounded,
+          title: "显示捕获的通知数据",
+          description: "关闭此选项可以减少电量消耗，同时保持通知扫描功能",
+          initialValue:
+              appStateSettings["notificationShowCapturedData"] ?? true,
         ),
-        IgnorePointer(
-          ignoring: !canReadEmails,
-          child: AnimatedOpacity(
-            duration: Duration(milliseconds: 300),
-            opacity: canReadEmails ? 1 : 0.4,
-            child: GmailApiScreen(),
+        if (appStateSettings["notificationShowCapturedData"] ?? true)
+          EmailsList(
+            messagesList: recentCapturedNotifications,
           ),
-        )
       ],
     );
-  }
-}
-
-Future<void> parseEmailsInBackground(context,
-    {bool sayUpdates = false, bool forceParse = false}) async {
-  if (appStateSettings["hasSignedIn"] == false) return;
-  if (errorSigningInDuringCloud == true) return;
-  if (appStateSettings["emailScanning"] == false) return;
-  // Prevent sign-in on web - background sign-in cannot access Google Drive etc.
-  if (kIsWeb && !entireAppLoaded) return;
-  // print(entireAppLoaded);
-  //Only run this once, don't run again if the global state changes (e.g. when changing a setting)
-  if (entireAppLoaded == false || forceParse) {
-    if (appStateSettings["AutoTransactions-canReadEmails"] == true) {
-      List<Transaction> transactionsToAdd = [];
-      Stopwatch stopwatch = new Stopwatch()..start();
-      print("Scanning emails");
-
-      bool hasSignedIn = false;
-      if (googleUser == null) {
-        hasSignedIn = await signInGoogle(
-            context: context,
-            gMailPermissions: true,
-            waitForCompletion: false,
-            silentSignIn: true);
-      } else {
-        hasSignedIn = true;
-      }
-      if (hasSignedIn == false) {
-        return;
-      }
-
-      List<dynamic> emailsParsed =
-          appStateSettings["EmailAutoTransactions-emailsParsed"] ?? [];
-      int amountOfEmails =
-          appStateSettings["EmailAutoTransactions-amountOfEmails"] ?? 10;
-      int newEmailCount = 0;
-
-      final authHeaders = await googleUser!.authHeaders;
-      final authenticateClient = GoogleAuthClient(authHeaders);
-      gMail.GmailApi gmailApi = gMail.GmailApi(authenticateClient);
-      gMail.ListMessagesResponse results = await gmailApi.users.messages
-          .list(googleUser!.id.toString(), maxResults: amountOfEmails);
-
-      int currentEmailIndex = 0;
-
-      List<ScannerTemplate> scannerTemplates =
-          await database.getAllScannerTemplates();
-      if (scannerTemplates.length <= 0) {
-        openSnackbar(
-          SnackbarMessage(
-            title:
-                "You have not setup the email scanning configuration in settings.",
-            onTap: () {
-              pushRoute(
-                context,
-                AutoTransactionsPageEmail(),
-              );
-            },
-          ),
-        );
-      }
-      for (gMail.Message message in results.messages!) {
-        currentEmailIndex++;
-        loadingProgressKey.currentState
-            ?.setProgressPercentage(currentEmailIndex / amountOfEmails);
-        // await Future.delayed(Duration(milliseconds: 1000));
-
-        // Remove this to always parse emails
-        if (emailsParsed.contains(message.id!)) {
-          print("Already checked this email!");
-          continue;
-        }
-        newEmailCount++;
-
-        gMail.Message messageData = await gmailApi.users.messages
-            .get(googleUser!.id.toString(), message.id!);
-        DateTime messageDate = DateTime.fromMillisecondsSinceEpoch(
-            int.parse(messageData.internalDate ?? ""));
-        String messageString = getEmailMessage(messageData);
-        print("Adding transaction based on email");
-
-        String? title;
-        double? amountDouble;
-
-        bool doesEmailContain = false;
-        ScannerTemplate? templateFound;
-        for (ScannerTemplate scannerTemplate in scannerTemplates) {
-          if (messageString.contains(scannerTemplate.contains)) {
-            doesEmailContain = true;
-            templateFound = scannerTemplate;
-            title = getTransactionTitleFromEmail(
-              messageString,
-              scannerTemplate.titleTransactionBefore,
-              scannerTemplate.titleTransactionAfter,
-            );
-            amountDouble = getTransactionAmountFromEmail(
-              messageString,
-              scannerTemplate.amountTransactionBefore,
-              scannerTemplate.amountTransactionAfter,
-            );
-            break;
-          }
-        }
-
-        if (doesEmailContain == false) {
-          emailsParsed.insert(0, message.id!);
-          continue;
-        }
-
-        if (title == null) {
-          openSnackbar(
-            SnackbarMessage(
-              title:
-                  "Couldn't find title in email. Check the email settings page for more information.",
-              onTap: () {
-                pushRoute(
-                  context,
-                  AutoTransactionsPageEmail(),
-                );
-              },
-            ),
-          );
-          emailsParsed.insert(0, message.id!);
-          continue;
-        } else if (amountDouble == null) {
-          openSnackbar(
-            SnackbarMessage(
-              title:
-                  "Couldn't find amount in email. Check the email settings page for more information.",
-              onTap: () {
-                pushRoute(
-                  context,
-                  AutoTransactionsPageEmail(),
-                );
-              },
-            ),
-          );
-
-          emailsParsed.insert(0, message.id!);
-          continue;
-        }
-
-        TransactionAssociatedTitleWithCategory? foundTitle =
-            (await database.getSimilarAssociatedTitles(title: title, limit: 1))
-                .firstOrNull;
-
-        TransactionCategory? selectedCategory = foundTitle?.category;
-        if (selectedCategory == null) continue;
-
-        title = filterEmailTitle(title);
-
-        await addAssociatedTitles(title, selectedCategory);
-
-        Transaction transactionToAdd = Transaction(
-          transactionPk: "-1",
-          name: title,
-          amount: (amountDouble).abs() * (selectedCategory.income ? 1 : -1),
-          note: "",
-          categoryFk: selectedCategory.categoryPk,
-          walletFk: appStateSettings["selectedWalletPk"],
-          dateCreated: messageDate,
-          dateTimeModified: null,
-          income: selectedCategory.income,
-          paid: true,
-          skipPaid: false,
-          methodAdded: MethodAdded.email,
-        );
-        transactionsToAdd.add(transactionToAdd);
-        openSnackbar(
-          SnackbarMessage(
-            title: templateFound!.templateName + ": " + "From Email",
-            description: title,
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.payments_outlined
-                : Icons.payments_rounded,
-          ),
-        );
-        // TODO have setting so they can choose if the emails are markes as read
-        gmailApi.users.messages.modify(
-          gMail.ModifyMessageRequest(removeLabelIds: ["UNREAD"]),
-          googleUser!.id,
-          message.id!,
-        );
-
-        emailsParsed.insert(0, message.id!);
-      }
-      // wait for intro animation to finish
-      if (Duration(milliseconds: 2500) > stopwatch.elapsed) {
-        print("waited extra" +
-            (Duration(milliseconds: 2500) - stopwatch.elapsed).toString());
-        await Future.delayed(
-            Duration(milliseconds: 2500) - stopwatch.elapsed, () {});
-      }
-      for (Transaction transaction in transactionsToAdd) {
-        await database.createOrUpdateTransaction(insert: true, transaction);
-      }
-      List<dynamic> emails = [
-        ...emailsParsed
-            .take(appStateSettings["EmailAutoTransactions-amountOfEmails"] + 10)
-      ];
-      updateSettings(
-        "EmailAutoTransactions-emailsParsed",
-        emails, // Keep 10 extra in case maybe the user deleted some emails recently
-        updateGlobalState: false,
-      );
-      if (newEmailCount > 0 || sayUpdates == true)
-        openSnackbar(
-          SnackbarMessage(
-            title: "Scanned " + results.messages!.length.toString() + " emails",
-            description: newEmailCount.toString() +
-                pluralString(newEmailCount == 1, " new email"),
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.mark_email_unread_outlined
-                : Icons.mark_email_unread_rounded,
-            onTap: () {
-              pushRoute(context, AutoTransactionsPageEmail());
-            },
-          ),
-        );
-    }
   }
 }
 
@@ -627,198 +409,59 @@ String? getTransactionTitleFromEmail(String messageString,
 double? getTransactionAmountFromEmail(String messageString,
     String amountTransactionBefore, String amountTransactionAfter) {
   double? amountDouble;
+
   try {
-    int startIndex = messageString.indexOf(amountTransactionBefore) +
-        amountTransactionBefore.length;
-    int endIndex = messageString.indexOf(amountTransactionAfter, startIndex);
-    String amountString = messageString.substring(startIndex, endIndex);
-    amountDouble = double.parse(amountString.replaceAll(RegExp('[^0-9.]'), ''));
-  } catch (e) {}
-  return amountDouble;
-}
+    // 新的自动识别逻辑：如果模板中设置了amountTransactionBefore为"auto"，使用正则表达式匹配货币符号后的数字
+    if (amountTransactionBefore == "auto" && amountTransactionAfter == "auto") {
+      // 正则表达式：匹配常见货币符号(¥$€£)后的数字，支持小数点和千位分隔符
+      RegExp amountRegex = RegExp(r'[¥$€£]\s*([\d,]+\.?\d*)');
+      Match? match = amountRegex.firstMatch(messageString);
 
-class GmailApiScreen extends StatefulWidget {
-  @override
-  _GmailApiScreenState createState() => _GmailApiScreenState();
-}
-
-class _GmailApiScreenState extends State<GmailApiScreen> {
-  bool loaded = false;
-  bool loading = false;
-  String error = "";
-  int amountOfEmails =
-      appStateSettings["EmailAutoTransactions-amountOfEmails"] ?? 10;
-
-  late gMail.GmailApi gmailApi;
-  List<String> messagesList = [];
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  init() async {
-    loading = true;
-    if (googleUser != null) {
-      try {
-        final authHeaders = await googleUser!.authHeaders;
-        final authenticateClient = GoogleAuthClient(authHeaders);
-        gMail.GmailApi gmailApi = gMail.GmailApi(authenticateClient);
-        gMail.ListMessagesResponse results = await gmailApi.users.messages
-            .list(googleUser!.id.toString(), maxResults: amountOfEmails);
-        setState(() {
-          loaded = true;
-          error = "";
-        });
-        int currentEmailIndex = 0;
-        for (gMail.Message message in results.messages!) {
-          gMail.Message messageData = await gmailApi.users.messages
-              .get(googleUser!.id.toString(), message.id!);
-          // print(DateTime.fromMillisecondsSinceEpoch(
-          //     int.parse(messageData.internalDate ?? "")));
-          String emailMessageString = getEmailMessage(messageData);
-          messagesList.add(emailMessageString);
-          currentEmailIndex++;
-          loadingProgressKey.currentState
-              ?.setProgressPercentage(currentEmailIndex / amountOfEmails);
-          if (mounted) {
-            setState(() {});
-          } else {
-            loadingProgressKey.currentState?.setProgressPercentage(0);
-            break;
-          }
-        }
-      } catch (e) {
-        setState(() {
-          loaded = true;
-          error = e.toString();
-        });
+      if (match != null && match.groupCount >= 1) {
+        String amountString = match.group(1)!;
+        // 清理数字字符串：移除千位分隔符，只保留数字和小数点
+        String cleanAmountString = amountString.replaceAll(RegExp(r','), '');
+        amountDouble = double.tryParse(cleanAmountString);
       }
-    }
-    loading = false;
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    if (googleUser == null) {
-      return SizedBox();
-    } else if (error != "" || (loaded == false && loading == false)) {
-      init();
-    }
-    if (error != "") {
-      return Padding(
-        padding: const EdgeInsetsDirectional.only(
-          top: 28.0,
-          start: 20,
-          end: 20,
-        ),
-        child: Center(
-          child: TextFont(
-            text: error,
-            fontSize: 15,
-            textAlign: TextAlign.center,
-            maxLines: 10,
-          ),
-        ),
-      );
-    }
-    if (loaded) {
-      // If the Future is complete, display the preview.
+      // 如果没找到，尝试其他可能的格式，比如数字前面没有空格
+      if (amountDouble == null) {
+        RegExp altAmountRegex = RegExp(r'[¥$€£]([\d,]+\.?\d*)');
+        Match? altMatch = altAmountRegex.firstMatch(messageString);
+        if (altMatch != null && altMatch.groupCount >= 1) {
+          String amountString = altMatch.group(1)!;
+          String cleanAmountString = amountString.replaceAll(RegExp(r','), '');
+          amountDouble = double.tryParse(cleanAmountString);
+        }
+      }
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SettingsContainerDropdown(
-            title: "Amount to Parse",
-            description:
-                "The number of recent emails to check to add transactions.",
-            initial: (amountOfEmails).toString(),
-            items: ["5", "10", "15", "20", "25"],
-            onChanged: (value) {
-              updateSettings(
-                "EmailAutoTransactions-amountOfEmails",
-                int.parse(value),
-                updateGlobalState: false,
-              );
-            },
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.format_list_numbered_outlined
-                : Icons.format_list_numbered_rounded,
-          ),
-          Padding(
-            padding:
-                const EdgeInsetsDirectional.only(top: 13, bottom: 4, start: 15),
-            child: TextFont(
-              text: "Configure",
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 5),
-          StreamBuilder<List<ScannerTemplate>>(
-            stream: database.watchAllScannerTemplates(),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                if (snapshot.data!.length <= 0) {
-                  return Padding(
-                    padding: const EdgeInsetsDirectional.all(5),
-                    child: StatusBox(
-                      title: "Email Configuration Missing",
-                      description: "Please add a configuration.",
-                      icon: appStateSettings["outlinedIcons"]
-                          ? Icons.warning_outlined
-                          : Icons.warning_rounded,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  );
-                }
-                return Column(
-                  children: [
-                    for (ScannerTemplate scannerTemplate in snapshot.data!)
-                      ScannerTemplateEntry(
-                        messagesList: messagesList,
-                        scannerTemplate: scannerTemplate,
-                      )
-                  ],
-                );
-              } else {
-                return Container();
-              }
-            },
-          ),
-          OpenContainerNavigation(
-            openPage: AddEmailTemplate(
-              messagesList: messagesList,
-            ),
-            borderRadius: 15,
-            button: (openContainer) {
-              return Row(
-                children: [
-                  Expanded(
-                    child: AddButton(
-                      margin: EdgeInsetsDirectional.only(
-                        start: 15,
-                        end: 15,
-                        bottom: 9,
-                        top: 4,
-                      ),
-                      onTap: openContainer,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          EmailsList(messagesList: messagesList)
-        ],
-      );
+      // 如果没找到，尝试匹配数字后面带货币符号的情况（如：0.02元）
+      if (amountDouble == null) {
+        RegExp altAmountRegex2 = RegExp(r'([\d,]+\.?\d*)\s*[¥$€£元角分]');
+        Match? altMatch2 = altAmountRegex2.firstMatch(messageString);
+        if (altMatch2 != null && altMatch2.groupCount >= 1) {
+          String amountString = altMatch2.group(1)!;
+          String cleanAmountString = amountString.replaceAll(RegExp(r','), '');
+          amountDouble = double.tryParse(cleanAmountString);
+        }
+      }
     } else {
-      return Padding(
-        padding: const EdgeInsetsDirectional.only(top: 28.0),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      // 保持原有的模板匹配逻辑作为后备
+      int startIndex = messageString.indexOf(amountTransactionBefore) +
+          amountTransactionBefore.length;
+      int endIndex = messageString.indexOf(amountTransactionAfter, startIndex);
+      String amountString = messageString.substring(startIndex, endIndex);
+      String cleanAmountString = amountString
+          .replaceAll(RegExp(r'[\s]'), '')
+          .replaceAll(RegExp(r'[¥$€£]'), '')
+          .replaceAll(RegExp(r','), '');
+      amountDouble = double.tryParse(cleanAmountString);
     }
+  } catch (e) {
+    print('Error parsing amount: $e');
   }
+
+  return amountDouble;
 }
 
 class ScannerTemplateEntry extends StatelessWidget {
@@ -843,7 +486,7 @@ class ScannerTemplateEntry extends StatelessWidget {
         button: (openContainer) {
           return Tappable(
             borderRadius: 15,
-            color: getColor(context, "lightDarkAccent"),
+            color: Theme.of(context).colorScheme.secondaryContainer,
             onTap: openContainer,
             child: Padding(
               padding: const EdgeInsetsDirectional.only(
@@ -857,10 +500,6 @@ class ScannerTemplateEntry extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      CategoryIcon(
-                          categoryPk: scannerTemplate.defaultCategoryFk,
-                          size: 25),
-                      SizedBox(width: 7),
                       TextFont(
                         text: scannerTemplate.templateName,
                         fontWeight: FontWeight.bold,
@@ -871,7 +510,7 @@ class ScannerTemplateEntry extends StatelessWidget {
                     onTap: () async {
                       DeletePopupAction? action = await openDeletePopup(
                         context,
-                        title: "Delete template?",
+                        title: "delete-template-question".tr(),
                         subtitle: scannerTemplate.templateName,
                       );
                       if (action == DeletePopupAction.Delete) {
@@ -880,7 +519,9 @@ class ScannerTemplateEntry extends StatelessWidget {
                         popRoute(context);
                         openSnackbar(
                           SnackbarMessage(
-                            title: "Deleted " + scannerTemplate.templateName,
+                            title: "deleted-template".tr() +
+                                " " +
+                                scannerTemplate.templateName,
                             icon: Icons.delete,
                           ),
                         );
@@ -898,13 +539,6 @@ class ScannerTemplateEntry extends StatelessWidget {
       ),
     );
   }
-}
-
-String parseHtmlString(String htmlString) {
-  final document = parse(htmlString);
-  final String parsedString = parse(document.body!.text).documentElement!.text;
-
-  return parsedString;
 }
 
 class EmailsList extends StatelessWidget {
@@ -958,15 +592,15 @@ class EmailsList extends StatelessWidget {
                           (title == null || amountDouble == null)
                       ? Theme.of(context)
                           .colorScheme
-                          .selectableColorRed
+                          .errorContainer
                           .withOpacity(0.5)
                       : doesEmailContain
                           ? Theme.of(context)
                               .colorScheme
-                              .selectableColorGreen
-                              .withOpacity(0.5)
+                              .secondary
+                              .withOpacity(0.3)
                           : backgroundColor ??
-                              getColor(context, "lightDarkAccent"),
+                              Theme.of(context).colorScheme.secondaryContainer,
                   onTap: () {
                     if (onTap != null) onTap!(messageString);
                     if (onTap == null)
@@ -987,7 +621,7 @@ class EmailsList extends StatelessWidget {
                                       padding: const EdgeInsetsDirectional.only(
                                           bottom: 5),
                                       child: TextFont(
-                                        text: "Parsing failed.",
+                                        text: "parsing-failed".tr(),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 17,
                                       ),
@@ -997,7 +631,7 @@ class EmailsList extends StatelessWidget {
                                   ? templateFound == null
                                       ? TextFont(
                                           fontSize: 19,
-                                          text: "Template Not found.",
+                                          text: "template-not-found".tr(),
                                           maxLines: 10,
                                           fontWeight: FontWeight.bold,
                                         )
@@ -1012,13 +646,13 @@ class EmailsList extends StatelessWidget {
                                   ? title == null
                                       ? TextFont(
                                           fontSize: 15,
-                                          text: "Title: Not found.",
+                                          text: "title-not-found".tr(),
                                           maxLines: 10,
                                           fontWeight: FontWeight.bold,
                                         )
                                       : TextFont(
                                           fontSize: 15,
-                                          text: "Title: " + title,
+                                          text: "" + title,
                                           maxLines: 10,
                                           fontWeight: FontWeight.bold,
                                         )
@@ -1031,8 +665,7 @@ class EmailsList extends StatelessWidget {
                                                   bottom: 8.0),
                                           child: TextFont(
                                             fontSize: 15,
-                                            text:
-                                                "Amount: Not found / invalid number.",
+                                            text: "amount-not-found".tr(),
                                             maxLines: 10,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -1043,11 +676,10 @@ class EmailsList extends StatelessWidget {
                                                   bottom: 8.0),
                                           child: TextFont(
                                             fontSize: 15,
-                                            text: "Amount: " +
-                                                convertToMoney(
-                                                    Provider.of<AllWallets>(
-                                                        context),
-                                                    amountDouble),
+                                            text: convertToMoney(
+                                                Provider.of<AllWallets>(
+                                                    context),
+                                                amountDouble),
                                             maxLines: 10,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -1077,30 +709,4 @@ class EmailsList extends StatelessWidget {
       },
     );
   }
-}
-
-String getEmailMessage(gMail.Message messageData) {
-  String messageEncoded = messageData.payload?.parts?[0].body?.data ?? "";
-  String messageString;
-  if (messageEncoded == "") {
-    gMail.MessagePart payload = messageData.payload!;
-    try {
-      String htmlString = utf8
-          .decode(payload.body!.dataAsBytes)
-          .replaceAll("[^\\x00-\\x7F]", "");
-      String parsedString = parseHtmlString(htmlString);
-      messageString = parsedString;
-    } catch (e) {
-      messageString = (messageData.snippet ?? "") +
-          "\n\n" +
-          "There was an error getting the rest of the email";
-    }
-  } else {
-    messageString = parseHtmlString(utf8.decode(base64.decode(messageEncoded)));
-  }
-  return messageString
-      .split(RegExp(r"[ \t\r\f\v]+"))
-      .join(" ")
-      .replaceAll(new RegExp(r'(?:[\t ]*(?:\r?\n|\r))+'), '\n\n')
-      .replaceAll(RegExp(r"(?<=\n) +"), "");
 }

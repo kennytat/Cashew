@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
@@ -66,18 +67,9 @@ Future<bool> runNotificationPayLoads(context) async {
   print("Notification payload: " + notificationPayload.toString());
   if (kIsWeb) return false;
   if (notificationPayload == null) return false;
-  if (notificationPayload == "addTransaction") {
-    // Add a delay so the keyboard can focus
-    await Future.delayed(Duration(milliseconds: 50), () async {
-      pushRoute(
-        context,
-        AddTransactionPage(
-          routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-        ),
-      );
-    });
-    return true;
-  } else if (notificationPayload == "upcomingTransaction") {
+  
+  // 处理即将到来的交易通知
+  if (notificationPayload == "upcomingTransaction") {
     // When the notification comes in, the transaction is past due!
     pushRoute(
       context,
@@ -88,9 +80,9 @@ Future<bool> runNotificationPayLoads(context) async {
     Uri notificationPayloadUri = Uri.parse(notificationPayload ?? "");
     if (notificationPayloadUri.queryParameters["transactionPk"] == null)
       return false;
-    String transactionPk =
+    String transactionPk = 
         notificationPayloadUri.queryParameters["transactionPk"] ?? "";
-    Transaction? transaction =
+    Transaction? transaction = 
         await database.getTransactionFromPk(transactionPk);
     pushRoute(
       context,
@@ -100,34 +92,69 @@ Future<bool> runNotificationPayLoads(context) async {
       ),
     );
     return true;
+  } else {
+    // 处理自动交易通知，payload是JSON格式
+    try {
+      Map<String, dynamic> payloadData = jsonDecode(notificationPayload!);
+      if (payloadData["type"] == "addTransaction") {
+        double amount = double.parse(payloadData["amount"] ?? "0");
+        String? title = payloadData["title"];
+        String? templatePk = payloadData["templatePk"];
+        String? dateStr = payloadData["date"];
+        DateTime? selectedDate = dateStr != null ? DateTime.parse(dateStr) : null;
+        
+        // 获取模板信息
+        ScannerTemplate? template;
+        if (templatePk != null) {
+          try {
+            template = await database.getScannerTemplateInstance(templatePk);
+          } catch (e) {
+            print("Error getting scanner template: " + e.toString());
+          }
+        }
+        
+        // 获取钱包信息
+        TransactionWallet? wallet;
+        if (template != null && template.walletFk != "-1") {
+          wallet = await database.getWalletInstanceOrNull(template.walletFk);
+        }
+        
+        // 获取类别信息
+        TransactionCategory? category;
+        if (title != null) {
+          TransactionAssociatedTitleWithCategory? foundTitle = 
+              (await database.getSimilarAssociatedTitles(title: title, limit: 1)).firstOrNull;
+          category = foundTitle?.category;
+        }
+        
+        if (category == null && template != null) {
+          category = await database.getCategoryInstanceOrNull(template.defaultCategoryFk);
+        }
+        
+        pushRoute(
+          context,
+          AddTransactionPage(
+            useCategorySelectedIncome: true,
+            routesToPopAfterDelete: RoutesToPopAfterDelete.None,
+            selectedAmount: amount,
+            selectedTitle: title,
+            selectedCategory: category,
+            startInitialAddTransactionSequence: false,
+            selectedWallet: wallet,
+            selectedDate: selectedDate,
+          ),
+        );
+        return true;
+      }
+    } catch (e) {
+      print("Error parsing notification payload: " + e.toString());
+    }
   }
   notificationPayload = "";
   return false;
 }
 
-Future<void> setDailyNotifications(context) async {
-  if (kIsWeb) return;
-  bool notificationsEnabled = appStateSettings["notifications"] == true;
 
-  if (notificationsEnabled) {
-    try {
-      TimeOfDay timeOfDay = TimeOfDay(
-          hour: appStateSettings["notificationHour"],
-          minute: appStateSettings["notificationMinute"]);
-      if (ReminderNotificationType
-              .values[appStateSettings["notificationsReminderType"]] ==
-          ReminderNotificationType.DayFromOpen) {
-        timeOfDay = TimeOfDay(
-            hour: appStateSettings["appOpenedHour"],
-            minute: appStateSettings["appOpenedMinute"]);
-      }
-      await scheduleDailyNotification(context, timeOfDay);
-    } catch (e) {
-      print(e.toString() +
-          " Error setting up notifications for upcoming transactions");
-    }
-  }
-}
 
 Future<void> setUpcomingNotifications(context) async {
   if (kIsWeb) return;

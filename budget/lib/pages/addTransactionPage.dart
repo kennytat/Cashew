@@ -1,4 +1,4 @@
-import 'package:budget/database/generatePreviewData.dart';
+
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
@@ -7,7 +7,6 @@ import 'package:budget/pages/addObjectivePage.dart';
 import 'package:budget/pages/addWalletPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/pages/sharedBudgetSettings.dart';
 import 'package:budget/pages/transactionsListPage.dart';
@@ -15,11 +14,9 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/navBarIconsData.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/upcomingTransactionsFunctions.dart';
-import 'package:budget/struct/uploadAttachment.dart';
 import 'package:budget/widgets/accountAndBackup.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
@@ -55,11 +52,11 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:budget/colors.dart';
 import 'package:flutter/services.dart' hide TextInput;
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:budget/widgets/util/showTimePicker.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/iconButtonScaled.dart';
@@ -106,6 +103,7 @@ class AddTransactionPage extends StatefulWidget {
     this.startInitialAddTransactionSequence = true,
     this.transferBalancePopup = false,
     required this.routesToPopAfterDelete,
+    this.templatePk,
   }) : super(key: key);
 
   //When a transaction is passed in, we are editing that transaction
@@ -125,6 +123,7 @@ class AddTransactionPage extends StatefulWidget {
   final String? selectedNotes;
   final bool startInitialAddTransactionSequence;
   final bool transferBalancePopup;
+  final String? templatePk;
 
   @override
   _AddTransactionPageState createState() => _AddTransactionPageState();
@@ -154,6 +153,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   bool selectedPaid = true;
   bool selectedBudgetIsShared = false;
   String selectedWalletPk = appStateSettings["selectedWalletPk"];
+  String? templatePk;
   bool notesInputFocused = false;
   bool showMoreOptions = false;
   List<String> selectedExcludedBudgetPks = [];
@@ -591,13 +591,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
       // recentlyAddedTransactionID.value =
 
-      if (widget.transaction == null &&
-          appStateSettings["purchaseID"] == null) {
-        updateSettings("premiumPopupAddTransactionCount",
-            (appStateSettings["premiumPopupAddTransactionCount"] ?? 0) + 1,
-            updateGlobalState: false);
-      }
-
+      // Removed premium popup counter
       return true;
     } catch (e) {
       if (e.toString() == "category-no-longer-exists") {
@@ -726,6 +720,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   @override
   void initState() {
     super.initState();
+    templatePk = widget.templatePk;
     if (widget.transaction != null) {
       //We are editing a transaction
       //Fill in the information from the passed in transaction
@@ -780,7 +775,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           openTransferBalancePopup();
           return;
         }
-        await premiumPopupAddTransaction(context);
         if (widget.startInitialAddTransactionSequence == false) return;
         if (appStateSettings["askForTransactionTitle"]) {
           openBottomSheet(
@@ -826,7 +820,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     }
     if (widget.selectedAmount != null) {
       selectedAmount = (widget.selectedAmount ?? 0).abs();
-      selectedIncome = (widget.selectedAmount ?? -1).isNegative == false;
+      // 移除自动设置selectedIncome的代码，让selectedIncome保持默认值false，或由category或显式参数决定
     }
     if (widget.selectedCategory != null) {
       selectedCategory = widget.selectedCategory;
@@ -1515,9 +1509,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                     getSelected: (String item) {
                       return selectedPayer == item;
                     },
-                    onLongPress: (String item) {
-                      memberPopup(context, item);
-                    },
+
                   ),
                 ),
               ),
@@ -1756,41 +1748,82 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                 children: [
                   Flexible(
                     flex: 2,
-                    child: IncomeExpenseTabSelector(
-                      hasBorderRadius: false,
-                      onTabChanged: setSelectedIncome,
-                      initialTabIsIncome: selectedIncome,
-                      syncWithInitial: true,
-                      color: categoryColor,
-                      unselectedColor: Colors.black.withOpacity(0.2),
-                      unselectedLabelColor: Colors.white.withOpacity(0.3),
-                      incomeLabel: isAddedToLoanObjective
-                          ? "collected".tr()
-                          : selectedType == TransactionSpecialType.debt ||
-                                  selectedType == TransactionSpecialType.credit
-                              ? "borrowed".tr()
-                              : selectedCategory?.categoryPk == "0"
-                                  ? "transfer-in".tr()
-                                  : null,
-                      incomeIconColor: isAddedToLoanObjective ||
-                              selectedType == TransactionSpecialType.debt ||
-                              selectedType == TransactionSpecialType.credit
-                          ? getColor(context, "unPaidOverdue")
+                    child: StreamBuilder<List<Objective>>(stream: database.watchAllObjectives(objectiveType: ObjectiveType.loan), builder: (context, snapshot) {
+                      String incomeLabel = "collected".tr();
+                      String expenseLabel = "paid".tr();
+                      
+                      if (snapshot.hasData && isAddedToLoanObjective && selectedObjectiveLoanPk != null) {
+                        // Find the loan objective
+                        Objective? loanObjective;
+                        try {
+                          loanObjective = snapshot.data!.firstWhere((obj) => obj.objectivePk == selectedObjectiveLoanPk);
+                        } catch (e) {
+                          // If not found, use default
+                        }
+                        
+                        if (loanObjective != null) {
+                          bool isDifferenceMode = loanObjective.amount == -1 && appStateSettings["longTermLoansDifferenceFeature"] == true;
+                          
+                          // 已收款状态 (incomeLabel)
+                          if (isDifferenceMode) {
+                            incomeLabel = "借入";
+                          } else if (loanObjective.income == false) {
+                            // 借出
+                            incomeLabel = "收款";
+                          } else {
+                            // 借入
+                            incomeLabel = "借入";
+                          }
+                          
+                          // 已支付状态 (expenseLabel)
+                          if (isDifferenceMode) {
+                            expenseLabel = "借出";
+                          } else if (loanObjective.income == false) {
+                            // 借出
+                            expenseLabel = "借出";
+                          } else {
+                            // 借入
+                            expenseLabel = "还账";
+                          }
+                        }
+                      }
+                      
+                      return IncomeExpenseTabSelector(
+                        hasBorderRadius: false,
+                        onTabChanged: setSelectedIncome,
+                        initialTabIsIncome: selectedIncome,
+                        syncWithInitial: true,
+                        color: categoryColor,
+                        unselectedColor: Colors.black.withOpacity(0.2),
+                        unselectedLabelColor: Colors.white.withOpacity(0.3),
+                        incomeLabel: isAddedToLoanObjective
+                            ? incomeLabel
+                            : selectedType == TransactionSpecialType.debt ||
+                                    selectedType == TransactionSpecialType.credit
+                                ? "borrowed".tr()
+                                : selectedCategory?.categoryPk == "0"
+                                    ? "transfer-in".tr()
+                                    : null,
+                        incomeIconColor: isAddedToLoanObjective ||
+                                selectedType == TransactionSpecialType.debt ||
+                                selectedType == TransactionSpecialType.credit
+                            ? getColor(context, "unPaidOverdue")
+                            : null,
+                        expenseLabel: isAddedToLoanObjective
+                            ? expenseLabel
+                            : selectedType == TransactionSpecialType.debt ||
+                                    selectedType == TransactionSpecialType.credit
+                                ? "lent".tr()
+                                : selectedCategory?.categoryPk == "0"
+                                    ? "transfer-out".tr()
+                                    : null,
+                        expenseIconColor: isAddedToLoanObjective ||
+                                selectedType == TransactionSpecialType.debt ||
+                                selectedType == TransactionSpecialType.credit
+                            ? getColor(context, "unPaidUpcoming")
                           : null,
-                      expenseLabel: isAddedToLoanObjective
-                          ? "paid".tr()
-                          : selectedType == TransactionSpecialType.debt ||
-                                  selectedType == TransactionSpecialType.credit
-                              ? "lent".tr()
-                              : selectedCategory?.categoryPk == "0"
-                                  ? "transfer-out".tr()
-                                  : null,
-                      expenseIconColor: isAddedToLoanObjective ||
-                              selectedType == TransactionSpecialType.debt ||
-                              selectedType == TransactionSpecialType.credit
-                          ? getColor(context, "unPaidUpcoming")
-                          : null,
-                    ),
+                      );
+                    }),
                   ),
                   if (appStateSettings["showTransactionsBalanceTransferTab"] ==
                           true &&
@@ -4000,10 +4033,7 @@ class SelectCategoryWithIncomeExpenseSelector extends StatefulWidget {
 
 class _SelectCategoryWithIncomeExpenseSelectorState
     extends State<SelectCategoryWithIncomeExpenseSelector> {
-  late bool? selectedIncome =
-      appStateSettings["showAllCategoriesWhenSelecting"] == true
-          ? null
-          : widget.selectedIncomeInitial;
+  late bool? selectedIncome = widget.selectedIncomeInitial; // 始终根据当前交易类型筛选类别
 
   void setSelectedIncome(bool? value) {
     if (widget.setSelectedIncome != null) widget.setSelectedIncome!(value);
@@ -4122,103 +4152,6 @@ class ReorderCategoriesPopup extends StatelessWidget {
   }
 }
 
-String? getFileIdFromUrl(String url) {
-  RegExp regExp = RegExp(r"/d/([a-zA-Z0-9_-]+)");
-  Match? match = regExp.firstMatch(url);
-  if (match != null && match.groupCount >= 1) {
-    return match.group(1)!;
-  } else {
-    return null;
-  }
-}
-
-Future<List<int>?> getGoogleDriveFileImageData(String url) async {
-  dynamic result = await openLoadingPopupTryCatch(
-    () async {
-      String? fileId = getFileIdFromUrl(url);
-      if (fileId == null) throw ("No file id found!");
-
-      if (googleUser == null) {
-        await signInGoogle(drivePermissionsAttachments: true);
-      }
-
-      final authHeaders = await googleUser!.authHeaders;
-      final authenticateClient = GoogleAuthClient(authHeaders);
-      drive.DriveApi driveApi = drive.DriveApi(authenticateClient);
-
-      List<int> dataStore = [];
-
-      drive.File fileMetadata =
-          await driveApi.files.get(fileId, $fields: 'size') as drive.File;
-      int totalBytes = int.parse(fileMetadata.size ?? "0");
-
-      dynamic response = await driveApi.files
-          .get(fileId, downloadOptions: drive.DownloadOptions.fullMedia);
-
-      num receivedBytes = 0;
-
-      loadingProgressKey.currentState?.setProgressPercentage(0);
-
-      await for (var data in response.stream) {
-        dataStore.insertAll(dataStore.length, data);
-        receivedBytes += data.length;
-        double progress = receivedBytes / totalBytes;
-        loadingProgressKey.currentState?.setProgressPercentage(progress);
-      }
-      loadingProgressKey.currentState?.setProgressPercentage(0);
-      return dataStore;
-    },
-    onError: (error) {
-      loadingProgressKey.currentState?.setProgressPercentage(0);
-      print(error);
-    },
-  );
-  if (result is List<int>) return result;
-  return null;
-}
-
-class RenderImageData extends StatelessWidget {
-  const RenderImageData(
-      {required this.imageData, required this.openLinkOnError, super.key});
-  final List<int>? imageData;
-  final VoidCallback openLinkOnError;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: () {
-        openLinkOnError();
-      },
-      child: Image.memory(
-        Uint8List.fromList(imageData ?? []),
-        errorBuilder: (context, error, stackTrace) => Center(
-          child: Tappable(
-            onTap: openLinkOnError,
-            color: Colors.transparent,
-            borderRadius: 15,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.symmetric(
-                  horizontal: 20, vertical: 25),
-              child: Column(
-                children: [
-                  TextFont(
-                    fontSize: 18,
-                    text: "failed-to-preview-image".tr(),
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                  ),
-                  SizedBox(height: 15),
-                  LowKeyButton(onTap: openLinkOnError, text: "open-link".tr()),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class LinkInNotes extends StatelessWidget {
   const LinkInNotes({
     required this.link,
@@ -4297,39 +4230,6 @@ class TransactionNotesTextInput extends StatefulWidget {
 
 class _TransactionNotesTextInputState extends State<TransactionNotesTextInput> {
   bool notesInputFocused = false;
-  late List<String> extractedLinks =
-      extractLinks(widget.noteInputController.text);
-
-  void addAttachmentLinkToNote(String? link) {
-    if (link == null) return;
-    String noteUpdated = widget.noteInputController.text +
-        (widget.noteInputController.text == "" ? "" : "\n") +
-        (link) +
-        " ";
-
-    widget.setSelectedNoteController(noteUpdated);
-    updateExtractedLinks(noteUpdated);
-  }
-
-  void removeLinkFromNote(String link) {
-    String originalText = widget.noteInputController.text;
-    String noteUpdated =
-        widget.noteInputController.text.replaceAll(link + " ", "");
-    if (noteUpdated == originalText) {
-      noteUpdated = widget.noteInputController.text.replaceAll(link + "\n", "");
-    }
-    widget.setSelectedNoteController(noteUpdated);
-    updateExtractedLinks(noteUpdated);
-  }
-
-  void updateExtractedLinks(String text) {
-    List<String> newlyExtractedLinks = extractLinks(text);
-    if (newlyExtractedLinks.toString() != extractedLinks.toString()) {
-      setState(() {
-        extractedLinks = newlyExtractedLinks;
-      });
-    }
-  }
 
   @override
   void initState() {
@@ -4344,7 +4244,7 @@ class _TransactionNotesTextInputState extends State<TransactionNotesTextInput> {
   }
 
   void _printLatestValue() {
-    updateExtractedLinks(widget.noteInputController.text);
+    // Nothing to do here
   }
 
   @override
@@ -4371,7 +4271,6 @@ class _TransactionNotesTextInputState extends State<TransactionNotesTextInput> {
               minLines: 3,
               onChanged: (text) async {
                 widget.setSelectedNoteController(text, setInput: false);
-                updateExtractedLinks(text);
               },
             ),
             onFocusChange: (hasFocus) {
@@ -4394,228 +4293,6 @@ class _TransactionNotesTextInputState extends State<TransactionNotesTextInput> {
                     inverse: true,
                   )
                 : getColor(context, "lightDarkAccent"),
-          ),
-          LinkInNotes(
-            color: (appStateSettings["materialYou"]
-                ? Theme.of(context).colorScheme.secondaryContainer
-                : getColor(context, "canvasContainer")),
-            link: "add-attachment".tr(),
-            iconData: appStateSettings["outlinedIcons"]
-                ? Icons.attachment_outlined
-                : Icons.attachment_rounded,
-            iconDataAfter: appStateSettings["outlinedIcons"]
-                ? Icons.add_outlined
-                : Icons.add_rounded,
-            onTap: () async {
-              openBottomSheet(
-                context,
-                // We need to use the custom controller because the ask for title popup uses the default controller
-                // Which we need to control separately
-                useCustomController: true,
-                reAssignBottomSheetControllerGlobal: false,
-                PopupFramework(
-                  title: "add-attachment".tr().capitalizeFirstofEach,
-                  subtitle: "add-attachment-description".tr(),
-                  child: Column(
-                    children: [
-                      if (kIsWeb == false)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(bottom: 13),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButtonStacked(
-                                  filled: false,
-                                  alignStart: true,
-                                  alignBeside: true,
-                                  padding: EdgeInsetsDirectional.symmetric(
-                                      horizontal: 20, vertical: 20),
-                                  text: "take-photo".tr(),
-                                  iconData: appStateSettings["outlinedIcons"]
-                                      ? Icons.camera_alt_outlined
-                                      : Icons.camera_alt_rounded,
-                                  onTap: () async {
-                                    popRoute(context);
-                                    if (await checkLockedFeatureIfInDemoMode(
-                                            context) ==
-                                        true) {
-                                      String? result = await getPhotoAndUpload(
-                                          source: ImageSource.camera);
-                                      if (result != null)
-                                        addAttachmentLinkToNote(result);
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (kIsWeb == false)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(bottom: 13),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButtonStacked(
-                                  filled: false,
-                                  alignStart: true,
-                                  alignBeside: true,
-                                  padding: EdgeInsetsDirectional.symmetric(
-                                      horizontal: 20, vertical: 20),
-                                  text: "select-photo".tr(),
-                                  iconData: appStateSettings["outlinedIcons"]
-                                      ? Icons.photo_library_outlined
-                                      : Icons.photo_library_rounded,
-                                  onTap: () async {
-                                    popRoute(context);
-                                    if (await checkLockedFeatureIfInDemoMode(
-                                            context) ==
-                                        true) {
-                                      String? result = await getPhotoAndUpload(
-                                          source: ImageSource.gallery);
-                                      addAttachmentLinkToNote(result);
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(bottom: 13),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButtonStacked(
-                                filled: false,
-                                alignStart: true,
-                                alignBeside: true,
-                                padding: EdgeInsetsDirectional.symmetric(
-                                    horizontal: 20, vertical: 20),
-                                text: "select-file".tr(),
-                                iconData: appStateSettings["outlinedIcons"]
-                                    ? Icons.file_open_outlined
-                                    : Icons.file_open_rounded,
-                                onTap: () async {
-                                  popRoute(context);
-                                  if (await checkLockedFeatureIfInDemoMode(
-                                          context) ==
-                                      true) {
-                                    String? result = await getFileAndUpload();
-                                    addAttachmentLinkToNote(result);
-                                  }
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          AnimatedSizeSwitcher(
-            child: extractedLinks.length <= 0
-                ? Container(
-                    key: ValueKey(1),
-                  )
-                : Column(
-                    children: [
-                      for (String link in extractedLinks)
-                        LinkInNotes(
-                          link: link,
-                          onLongPress: () {
-                            copyToClipboard(link);
-                          },
-                          onTap: () async {
-                            openUrl(link);
-                          },
-                          extraWidget: Row(
-                            children: [
-                              if (link.contains("drive.google.com"))
-                                Padding(
-                                  padding: const EdgeInsetsDirectional.only(
-                                      end: 3, start: 5),
-                                  child: IconButtonScaled(
-                                    iconData: appStateSettings["outlinedIcons"]
-                                        ? Icons.photo_outlined
-                                        : Icons.photo_rounded,
-                                    iconSize: 16,
-                                    scale: 1.6,
-                                    onTap: () async {
-                                      List<int>? result =
-                                          await getGoogleDriveFileImageData(
-                                              link);
-                                      if (result == null) {
-                                        openUrl(link);
-                                      } else {
-                                        openBottomSheet(
-                                          context,
-                                          PopupFramework(
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadiusDirectional
-                                                      .circular(getPlatform() ==
-                                                              PlatformOS.isIOS
-                                                          ? 10
-                                                          : 15),
-                                              child: RenderImageData(
-                                                imageData: result,
-                                                openLinkOnError: () {
-                                                  openUrl(link);
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                        // Update the size of the bottom sheet
-                                        Future.delayed(
-                                            Duration(milliseconds: 300), () {
-                                          bottomSheetControllerGlobal
-                                              .snapToExtent(0);
-                                        });
-                                      }
-                                    },
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                    end: 11, start: 5),
-                                child: IconButtonScaled(
-                                  iconData: appStateSettings["outlinedIcons"]
-                                      ? Icons.remove_outlined
-                                      : Icons.remove_rounded,
-                                  iconSize: 16,
-                                  scale: 1.6,
-                                  onTap: () {
-                                    openPopup(
-                                      context,
-                                      icon: appStateSettings["outlinedIcons"]
-                                          ? Icons.link_off_outlined
-                                          : Icons.link_off_rounded,
-                                      title: "remove-link-question".tr(),
-                                      description:
-                                          "remove-link-description".tr(),
-                                      onCancel: () {
-                                        popRoute(context);
-                                      },
-                                      onCancelLabel: "cancel".tr(),
-                                      onSubmit: () {
-                                        removeLinkFromNote(link);
-                                        popRoute(context);
-                                      },
-                                      onSubmitLabel: "remove".tr(),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
           ),
         ],
       ),

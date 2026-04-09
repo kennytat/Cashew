@@ -56,9 +56,9 @@ class BottomNavBarState extends State<BottomNavBar> {
         walletDetailsAllSpendingPageStateKey.currentState?.scrollToTop();
       if (navigationStackedIndex == 14)
         objectivesListPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 16)
+      if (navigationStackedIndex == 15)
         upcomingOverdueTransactionsStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 17)
+      if (navigationStackedIndex == 16)
         creditDebtTransactionsKey.currentState?.scrollToTop();
     } else {
       // We need to change to the navigation index

@@ -4,7 +4,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/notificationsSettings.dart';
+
 import 'package:budget/widgets/periodCyclePicker.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:drift/drift.dart' show Value;
@@ -121,11 +121,11 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "markAsPaidOnOriginalDay": false,
     "batterySaver": false,
     "username": "",
-    "hasOnboarded": false,
+    "hasOnboarded": true,
     "restrictAmountOfInitiallyLoadedTransactions": false,
     "autoAddAssociatedTitles": true,
     "AutoTransactions-canReadEmails": false,
-    "notificationScanningDebug": false,
+    "notificationScanningDebug": true,
     "notificationScanning": false,
     "accountColorfulAmountsWithArrows": false,
     "netTotalsColorful": false,
@@ -140,16 +140,12 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "openedStoreRating": false,
     "dismissedStoreRating": false,
     "submittedFeedback": false,
-    "canShowBackupReminderPopup": true,
+    "canShowBackupReminderPopup": false,
     "canShowTransactionActionButtonTip": true,
     "autoLoginDisabledOnWebTip": true,
     "forceAutoLogin": false,
     "allSpendingPageTip": true,
-    "notifications": true,
-    "notificationHour": 20,
-    "notificationMinute": 0,
     "notificationsUpcomingTransactions": true,
-    "notificationsReminderType": ReminderNotificationType.IfAppNotOpened.index,
     "appOpenedHour": DateTime.now().hour,
     "appOpenedMinute": DateTime.now().minute,
     "materialYou": supportsSystemColor(),
@@ -198,11 +194,7 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "showMethodAdded": false,
     "showBackupLimit": false,
     "outlinedIcons": false,
-    "premiumPopupAddTransactionCount": -5,
-    "premiumPopupAddTransactionLastShown": DateTime.now().toString(),
-    "premiumPopupFreeSeen": false,
-    "previewDemo": false,
-    "purchaseID": null,
+
     "showAccountLabelTagInTransactionEntry": false,
     "showCurrencyLabel": false,
     "showTransactionsMonthlySpendingSummary": true,
@@ -233,7 +225,7 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "loansLastPage": 0, //index of the last tab on the loans page
     // "loansUseDifferenceInsteadOfTotalGoal": false,
     // "loansHideDate": false,
-    "longTermLoansDifferenceFeature": false,
+    "longTermLoansDifferenceFeature": true,
     // *********************************************************** //
     // For showing information within a certain cycle for all spending wallet details page
     // cycleSettingsExtension = ""

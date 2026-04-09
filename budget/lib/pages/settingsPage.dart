@@ -1,15 +1,14 @@
 import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
-import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
 import 'package:budget/pages/creditDebtTransactionsPage.dart';
+import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/objectivesListPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -37,7 +36,6 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/radioItems.dart';
-import 'package:budget/widgets/ratingPopup.dart';
 import 'package:budget/widgets/restartApp.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/selectColor.dart';
@@ -48,6 +46,7 @@ import 'package:budget/widgets/sliderSelector.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
+import 'package:budget/functions.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/main.dart';
@@ -95,29 +94,20 @@ class MoreActionsPageState extends State<MoreActionsPage> {
         backButton: false,
         horizontalPaddingConstrained: true,
         actions: [
-          CustomPopupMenuButton(
-            showButtons: true,
-            keepOutFirst: true,
-            items: [
-              if (appStateSettings["showFAQAndHelpLink"] == true)
-                DropdownItemMenu(
-                  id: "open-faq",
-                  label: "faq".tr(),
-                  icon: appStateSettings["outlinedIcons"]
-                      ? Icons.live_help_outlined
-                      : Icons.live_help_rounded,
-                  action: () {
-                    openUrl("https://cashewapp.web.app/faq.html");
-                  },
-                ),
-            ],
+          IconButton(
+            onPressed: () {
+              pushRoute(context, AboutPage());
+            },
+            icon: Icon(
+              appStateSettings["outlinedIcons"] 
+                  ? Icons.info_outline_rounded
+                  : Icons.info_rounded,
+              size: 24,
+            ),
+            tooltip: "about-cashew".tr(),
           ),
         ],
         listWidgets: [
-          Padding(
-            padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-            child: PremiumBanner(),
-          ),
           MorePages()
         ],
       );
@@ -144,6 +134,22 @@ class MorePages extends StatelessWidget {
                   child: SettingsContainerOpenPage(
                     openPage: SettingsPageFramework(
                       key: settingsPageFrameworkStateKey,
+                      actions: hasSideNavigation == false
+                          ? [
+                              IconButton(
+                                onPressed: () {
+                                  pushRoute(context, AboutPage());
+                                },
+                                icon: Icon(
+                                  appStateSettings["outlinedIcons"] 
+                                      ? Icons.info_outline_rounded
+                                      : Icons.info_rounded,
+                                  size: 24,
+                                ),
+                                tooltip: "about-cashew".tr(),
+                              ),
+                            ]
+                          : null,
                     ),
                     title: navBarIconsData["settings"]!.labelLong.tr(),
                     icon: navBarIconsData["settings"]!.iconData,
@@ -174,80 +180,6 @@ class MorePages extends StatelessWidget {
                 ),
               ],
             ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Expanded(
-              //   child: Padding(
-              //     padding: EdgeInsetsDirectional.symmetric(vertical: 5, horizontal: 4),
-              //     child: SettingsContainer(
-              //       onTap: () {
-              //         openUrl("https://github.com/jameskokoska/Cashew");
-              //       },
-              //       title: "open-source".tr(),
-              //       icon: MoreIcons.github,
-              //       isOutlined: true,
-              //     ),
-              //   ),
-              // ),
-              Expanded(
-                child: SettingsContainerOpenPage(
-                  openPage: AboutPage(),
-                  title: "about-app".tr(namedArgs: {"app": globalAppName}),
-                  icon: navBarIconsData["about"]!.iconData,
-                  isOutlined: true,
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.symmetric(
-                      vertical: 5, horizontal: 4),
-                  child: SettingsContainer(
-                    onTap: () {
-                      openBottomSheet(context, RatingPopup(), fullSnap: true);
-                    },
-                    title: "feedback".tr(),
-                    icon: appStateSettings["outlinedIcons"]
-                        ? Icons.rate_review_outlined
-                        : Icons.rate_review_rounded,
-                    isOutlined: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              appStateSettings["showBillSplitterShortcut"] == true &&
-                      hasSideNavigation == false
-                  ? Expanded(
-                      child: SettingsContainerOpenPage(
-                        openPage: BillSplitter(),
-                        title: "bill-splitter".tr(),
-                        icon: appStateSettings["outlinedIcons"]
-                            ? Icons.summarize_outlined
-                            : Icons.summarize_rounded,
-                        isOutlined: true,
-                      ),
-                    )
-                  : notificationsGlobalEnabled
-                      ? Expanded(
-                          child: SettingsContainerOpenPage(
-                            openPage: NotificationsPage(),
-                            title: navBarIconsData["notifications"]!.label.tr(),
-                            icon: navBarIconsData["notifications"]!.iconData,
-                            isOutlined: true,
-                          ),
-                        )
-                      : SizedBox.shrink(),
-              if (hasSideNavigation == false)
-                Expanded(
-                    child: GoogleAccountLoginButton(
-                  key: settingsGoogleAccountLoginButtonKey,
-                )),
-            ],
-          ),
           if (hasSideNavigation == false)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -290,6 +222,32 @@ class MorePages extends StatelessWidget {
                     openPage: CreditDebtTransactions(isCredit: null),
                     title: navBarIconsData["loans"]!.label.tr(),
                     icon: navBarIconsData["loans"]!.iconData,
+                    isOutlined: true,
+                  ),
+                ),
+              ],
+            ),
+          if (hasSideNavigation == false)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: SettingsContainerOpenPage(
+                    openPage: BillSplitter(),
+                    title: "bill-splitter".tr(),
+                    icon: appStateSettings["outlinedIcons"]
+                        ? Icons.summarize_outlined
+                        : Icons.summarize_rounded,
+                    isOutlined: true,
+                  ),
+                ),
+                Expanded(
+                  child: SettingsContainerOpenPage(
+                    openPage: ActivityPage(),
+                    title: "activity-log".tr(),
+                    icon: appStateSettings["outlinedIcons"]
+                        ? Icons.history_outlined
+                        : Icons.history_rounded,
                     isOutlined: true,
                   ),
                 ),
@@ -401,7 +359,12 @@ Future<String> enterNameBottomSheet(context,
 }
 
 class SettingsPageFramework extends StatefulWidget {
-  const SettingsPageFramework({super.key});
+  const SettingsPageFramework({
+    super.key,
+    this.actions,
+  });
+
+  final List<Widget>? actions;
 
   @override
   State<SettingsPageFramework> createState() => SettingsPageFrameworkState();
@@ -418,6 +381,7 @@ class SettingsPageFrameworkState extends State<SettingsPageFramework> {
     return PageFramework(
       title: "settings".tr(),
       dragDownToDismiss: true,
+      actions: widget.actions,
       listWidgets: [SettingsPageContent()],
     );
   }
@@ -517,16 +481,26 @@ class SettingsPageContent extends StatelessWidget {
               ? Icons.home_outlined
               : Icons.home_rounded,
         ),
-
-        notificationsGlobalEnabled && getIsFullScreen(context) == false
+        
+        // 添加通知和通知交易按钮，保持与编辑主页相同的UI格局
+        notificationsGlobalEnabled
             ? SettingsContainerOpenPage(
                 openPage: NotificationsPage(),
-                title: "notifications".tr(),
+                title: navBarIconsData["notifications"]!.label.tr(),
                 icon: appStateSettings["outlinedIcons"]
                     ? Icons.notifications_outlined
                     : Icons.notifications_rounded,
               )
             : SizedBox.shrink(),
+            
+        // 添加通知交易设置入口
+        SettingsContainerOpenPage(
+            openPage: AutoTransactionsPageEmail(),
+            title: "notification-transactions".tr(),
+            icon: appStateSettings["outlinedIcons"]
+                ? Icons.edit_notifications_outlined
+                : Icons.edit_notifications_rounded,
+        ),
 
         BiometricsSettingToggle(),
 
@@ -562,50 +536,6 @@ class SettingsPageContent extends StatelessWidget {
               : Icons.app_registration_rounded,
         ),
 
-        SettingsHeader(title: "tools-and-extras".tr()),
-        // SettingsContainerOpenPage(
-        //   openPage: AutoTransactionsPage(),
-        //   title: "Auto Transactions",
-        //   icon: appStateSettings["outlinedIcons"] ? Icons.auto_fix_high_outlined : Icons.auto_fix_high_rounded,
-        // ),
-
-        appStateSettings["emailScanning"]
-            ? SettingsContainerOpenPage(
-                openPage: AutoTransactionsPageEmail(),
-                title: "auto-email-transactions".tr(),
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.mark_email_unread_outlined
-                    : Icons.mark_email_unread_rounded,
-              )
-            : SizedBox.shrink(),
-
-        appStateSettings["notificationScanningDebug"] &&
-                getPlatform(ignoreEmulation: true) == PlatformOS.isAndroid
-            ? SettingsContainerOpenPage(
-                title: "Notification Transactions",
-                openPage: AutoTransactionsPageNotifications(),
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.edit_notifications_outlined
-                    : Icons.edit_notifications_rounded,
-              )
-            : SizedBox.shrink(),
-
-        SettingsContainerOpenPage(
-          openPage: BillSplitter(),
-          title: "bill-splitter".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.summarize_outlined
-              : Icons.summarize_rounded,
-        ),
-
-        SettingsContainerOpenPage(
-          openPage: ActivityPage(),
-          title: "transaction-activity-log".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.ballot_outlined
-              : Icons.ballot_rounded,
-        ),
-
         SettingsHeader(title: "import-and-export".tr()),
 
         ExportCSV(),
@@ -617,11 +547,6 @@ class SettingsPageContent extends StatelessWidget {
         ExportDB(),
 
         ImportDB(),
-
-        GoogleAccountLoginButton(
-          isOutlinedButton: false,
-          forceButtonName: "google-drive".tr(),
-        ),
       ],
     );
   }

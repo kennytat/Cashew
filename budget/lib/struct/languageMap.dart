@@ -114,7 +114,7 @@ class InitializeLocalizations extends StatelessWidget {
       supportedLocales: supportedLocales.values.toList(),
       path: 'assets/translations/generated',
       useFallbackTranslations: true,
-      fallbackLocale: supportedLocales.values.toList().first,
+      fallbackLocale: supportedLocales["zh"] ?? supportedLocales.values.toList().first,
       child: child,
     );
   }

@@ -7,7 +7,6 @@ import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/pastBudgetsPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
@@ -156,7 +155,7 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
       searchFilters = widget.initialSearchFilters;
       selectedDateTimeRange = widget.initialSearchFilters?.dateTimeRange;
     } else if (widget.wallet == null) {
-      allSpendingHistoryDismissedPremium = false;
+      // Removed allSpendingHistoryDismissedPremium
       searchFilters?.loadFilterString(
         appStateSettings["allSpendingSetFiltersString"],
         skipDateTimeRange: true,
@@ -1210,14 +1209,21 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
       SliverToBoxAdapter(child: SizedBox(height: 40)),
     ];
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
+        
         if ((globalSelectedID.value[listID] ?? []).length > 0) {
-          globalSelectedID.value[listID] = [];
-          globalSelectedID.notifyListeners();
-          return false;
+          // 创建一个新的Map副本，修改后再赋值给value，这样ValueNotifier才会检测到变化
+          Map<String, List<String>> newSelectedID = Map.from(globalSelectedID.value);
+          newSelectedID[listID] = [];
+          
+          // 修改value属性，ValueNotifier会自动触发notifyListeners
+          globalSelectedID.value = newSelectedID;
         } else {
-          return true;
+          // 允许返回
+          navigatorKey.currentState?.pop();
         }
       },
       child: PageFramework(
@@ -2167,7 +2173,7 @@ class WalletDetailsLineGraph extends StatelessWidget {
   }
 }
 
-bool allSpendingHistoryDismissedPremium = false;
+
 
 class AllSpendingPastSpendingGraph extends StatefulWidget {
   const AllSpendingPastSpendingGraph({
@@ -2583,70 +2589,64 @@ class _AllSpendingPastSpendingGraphState
             children: [
               Container(
                 color: Theme.of(context).colorScheme.background,
-                child: FadeOutAndLockFeature(
-                  hasInitiallyDismissed: allSpendingHistoryDismissedPremium,
-                  actionAfter: () {
-                    allSpendingHistoryDismissedPremium = true;
-                  },
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsetsDirectional.symmetric(
-                            vertical: 7, horizontal: 0),
-                        child: Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 5),
-                          child: ClipRRect(
-                            child: BudgetHistoryLineGraph(
-                              forceMinYIfPositive:
-                                  widget.appStateSettingsNetAllSpendingTotal
-                                      ? null
-                                      : 0,
-                              showDateOnHover: true,
-                              onTouchedIndex: (index) {},
-                              color: dynamicPastel(
-                                context,
-                                Theme.of(context).colorScheme.primary,
-                                amountLight: 0.4,
-                                amountDark: 0.2,
-                              ),
-                              dateRanges: dateTimeRanges,
-                              lineColors: allSpots.length > 1
-                                  ? [
-                                      getColor(context, "expenseAmount"),
-                                      getColor(context, "incomeAmount"),
-                                    ]
-                                  : null,
-                              spots: allSpots,
-                              horizontalLineAt: null,
-                              budget: getCustomCycleTempBudget(""),
-                              extraCategorySpots: {},
-                              categoriesMapped: {},
-                              loadAllEvenIfZero: amountLoadedPressedOnce,
-                              setNoPastRegionsAreZero: (bool value) {
-                                amountLoadedPressedOnce = true;
-                              },
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                          vertical: 7, horizontal: 0),
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 5),
+                        child: ClipRRect(
+                          child: BudgetHistoryLineGraph(
+                            forceMinYIfPositive:
+                                widget.appStateSettingsNetAllSpendingTotal
+                                    ? null
+                                    : 0,
+                            showDateOnHover: true,
+                            onTouchedIndex: (index) {},
+                            color: dynamicPastel(
+                              context,
+                              Theme.of(context).colorScheme.primary,
+                              amountLight: 0.4,
+                              amountDark: 0.2,
                             ),
+                            dateRanges: dateTimeRanges,
+                            lineColors: allSpots.length > 1
+                                ? [
+                                    getColor(context, "expenseAmount"),
+                                    getColor(context, "incomeAmount"),
+                                  ]
+                                : null,
+                            spots: allSpots,
+                            horizontalLineAt: null,
+                            budget: getCustomCycleTempBudget(""),
+                            extraCategorySpots: {},
+                            categoriesMapped: {},
+                            loadAllEvenIfZero: amountLoadedPressedOnce,
+                            setNoPastRegionsAreZero: (bool value) {
+                              amountLoadedPressedOnce = true;
+                            },
                           ),
                         ),
                       ),
-                      LoadMorePeriodsButton(
-                        onPressed: () {
-                          if (amountLoadedPressedOnce == false) {
-                            setState(() {
-                              amountLoadedPressedOnce = true;
-                            });
-                          } else {
-                            int amountMoreToLoad =
-                                getIsFullScreen(context) == false ? 3 : 5;
-                            loadLines(amountLoaded + amountMoreToLoad);
-                            setState(() {
-                              amountLoaded = amountLoaded + amountMoreToLoad;
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                    LoadMorePeriodsButton(
+                      onPressed: () {
+                        if (amountLoadedPressedOnce == false) {
+                          setState(() {
+                            amountLoadedPressedOnce = true;
+                          });
+                        } else {
+                          int amountMoreToLoad =
+                              getIsFullScreen(context) == false ? 3 : 5;
+                          loadLines(amountLoaded + amountMoreToLoad);
+                          setState(() {
+                            amountLoaded = amountLoaded + amountMoreToLoad;
+                          });
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
               Transform.translate(

@@ -1,25 +1,16 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
-import 'package:budget/pages/autoTransactionsPageEmail.dart';
-import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/widgets/button.dart';
-import 'package:budget/widgets/navigationSidebar.dart';
-import 'package:budget/widgets/openBottomSheet.dart';
-import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
-import 'package:budget/widgets/framework/popupFramework.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/saveBottomButton.dart';
-import 'package:budget/widgets/selectCategory.dart';
 import 'package:budget/widgets/selectChips.dart';
-import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
-import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:budget/colors.dart';
 import 'package:provider/provider.dart';
 
@@ -38,21 +29,10 @@ class AddEmailTemplate extends StatefulWidget {
 }
 
 class _AddEmailTemplateState extends State<AddEmailTemplate> {
-  int characterPadding = 8;
-
   bool? canAddTemplate;
-
-  TransactionCategory? selectedCategory;
   String? selectedWalletPk;
-  String? selectedMessageString;
   String? selectedName;
   String? selectedSubject;
-  String? amountTransactionBefore;
-  String? amountTransactionAfter;
-  String? selectedAmount;
-  String? titleTransactionBefore;
-  String? titleTransactionAfter;
-  String? selectedTitle;
 
   @override
   void initState() {
@@ -63,24 +43,8 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
           : widget.scannerTemplate!.walletFk;
       selectedName = widget.scannerTemplate!.templateName;
       selectedSubject = widget.scannerTemplate!.contains;
-      amountTransactionBefore = widget.scannerTemplate!.amountTransactionBefore;
-      amountTransactionAfter = widget.scannerTemplate!.amountTransactionAfter;
-      titleTransactionBefore = widget.scannerTemplate!.titleTransactionBefore;
-      titleTransactionAfter = widget.scannerTemplate!.titleTransactionAfter;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      updateInitial();
-    });
-  }
-
-  updateInitial() async {
-    if (widget.scannerTemplate != null) {
-      TransactionCategory? getSelectedCategory = await database
-          .getCategoryInstance(widget.scannerTemplate!.defaultCategoryFk);
-      setState(() {
-        selectedCategory = getSelectedCategory;
-      });
-    }
+    determineBottomButton();
   }
 
   @override
@@ -89,274 +53,24 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
   }
 
   determineBottomButton() {
-    if (getTransactionAmountFromEmail(
-              selectedMessageString ?? "",
-              amountTransactionBefore ?? "",
-              amountTransactionAfter ?? "",
-            ) ==
-            null &&
-        selectedMessageString != null) {
-      setState(() {
-        canAddTemplate = false;
-      });
-      return;
+    bool canAdd = true;
+    
+    // 简化验证逻辑：只需要模板名称和主题文本
+    if (selectedName == null || selectedName!.trim() == "") {
+      canAdd = false;
     }
-    if (selectedTitle == null && selectedMessageString != null) {
-      setState(() {
-        canAddTemplate = false;
-      });
-      return;
+    
+    if (selectedSubject == null || selectedSubject!.trim() == "") {
+      canAdd = false;
     }
 
-    if (selectedName == null) return;
-    if (selectedCategory == null) return;
-    if (amountTransactionBefore == null) return;
-    if (amountTransactionAfter == null) return;
-    if (titleTransactionBefore == null) return;
-    if (titleTransactionAfter == null) return;
-
     setState(() {
-      canAddTemplate = true;
+      canAddTemplate = canAdd;
     });
-    return true;
+    return canAdd;
   }
 
-  void setMessageString(String messageString) {
-    setState(() {
-      selectedMessageString = messageString;
-    });
-    determineBottomButton();
-    return;
-  }
 
-  void setSelectedName(String title) {
-    setState(() {
-      selectedName = title;
-    });
-    determineBottomButton();
-    return;
-  }
-
-  void setSelectedCategory(TransactionCategory category) {
-    setState(() {
-      selectedCategory = category;
-    });
-    determineBottomButton();
-    return;
-  }
-
-  void setSelectedWalletPk(String? walletPk) {
-    setState(() {
-      selectedWalletPk = walletPk;
-    });
-    determineBottomButton();
-    return;
-  }
-
-  Widget selectSubjectText(String messageString, VoidCallback next) {
-    return PopupFramework(
-      title: "Select Subject Text",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextFont(
-            text: "Only these messages that contain this text will be scanned.",
-            fontSize: 14,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 5),
-          TextFont(
-            text:
-                "Long press/double tap to select text. Press the 'Done' button at the bottom after selected",
-            fontSize: 14,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 15),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadiusDirectional.all(Radius.circular(15)),
-              color: getColor(context, "lightDarkAccentHeavy"),
-            ),
-            child: Padding(
-              padding: const EdgeInsetsDirectional.all(15),
-              child: SelectableText(
-                messageString,
-                toolbarOptions: ToolbarOptions(
-                    copy: false, cut: false, paste: false, selectAll: false),
-                onSelectionChanged: (selection, changeCause) {
-                  selectedSubject = messageString.substring(
-                      selection.baseOffset, selection.extentOffset);
-                  determineBottomButton();
-                  setState(() {});
-                },
-              ),
-            ),
-          ),
-          SizedBox(height: 10),
-          Button(
-            label: "done".tr(),
-            onTap: () {
-              determineBottomButton();
-              setState(() {});
-              popRoute(context);
-              next();
-            },
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget selectAmountText(String messageString, VoidCallback next) {
-    return PopupFramework(
-      title: "Select Amount",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextFont(
-            text: "Select the amount of the transaction.",
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 5),
-          TextFont(
-            text:
-                "Long press/double tap to select text. Press the 'Done' button at the bottom after selected",
-            fontSize: 14,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 15),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadiusDirectional.all(Radius.circular(15)),
-              color: getColor(context, "lightDarkAccentHeavy"),
-            ),
-            child: Padding(
-              padding: const EdgeInsetsDirectional.all(15),
-              child: SelectableText(
-                messageString,
-                toolbarOptions: ToolbarOptions(
-                    copy: false, cut: false, paste: false, selectAll: false),
-                onSelectionChanged: (selection, changeCause) {
-                  if (selection.baseOffset - characterPadding < 0) {
-                    amountTransactionBefore =
-                        messageString.substring(0, selection.baseOffset);
-                  } else {
-                    amountTransactionBefore = messageString.substring(
-                        selection.baseOffset - characterPadding,
-                        selection.baseOffset);
-                  }
-                  if (selection.extentOffset + characterPadding >
-                      messageString.length - 1) {
-                    amountTransactionAfter = messageString.substring(
-                        selection.extentOffset, messageString.length);
-                  } else {
-                    amountTransactionAfter = messageString.substring(
-                        selection.extentOffset,
-                        selection.extentOffset + characterPadding);
-                  }
-                  selectedAmount = messageString.substring(
-                      selection.baseOffset, selection.extentOffset);
-                  determineBottomButton();
-                  setState(() {});
-                },
-              ),
-            ),
-          ),
-          SizedBox(height: 10),
-          Button(
-            label: "done".tr(),
-            onTap: () {
-              determineBottomButton();
-              popRoute(context);
-              setState(() {});
-              next();
-            },
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget selectTitleText(String messageString, VoidCallback next) {
-    return PopupFramework(
-      title: "Select Title",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextFont(
-            text: "Select the title of the transaction.",
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 5),
-          TextFont(
-            text:
-                "Long press/double tap to select text. Press the 'Done' button at the bottom after selected",
-            fontSize: 14,
-            maxLines: 10,
-            textAlign: TextAlign.start,
-          ),
-          SizedBox(height: 15),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadiusDirectional.all(Radius.circular(15)),
-              color: getColor(context, "lightDarkAccentHeavy"),
-            ),
-            child: Padding(
-              padding: const EdgeInsetsDirectional.all(15),
-              child: SelectableText(
-                messageString,
-                toolbarOptions: ToolbarOptions(
-                    copy: false, cut: false, paste: false, selectAll: false),
-                onSelectionChanged: (selection, changeCause) {
-                  if (selection.baseOffset - characterPadding < 0) {
-                    titleTransactionBefore =
-                        messageString.substring(0, selection.baseOffset);
-                  } else {
-                    titleTransactionBefore = messageString.substring(
-                        selection.baseOffset - characterPadding,
-                        selection.baseOffset);
-                  }
-
-                  if (selection.extentOffset + characterPadding >
-                      messageString.length - 1) {
-                    titleTransactionAfter = messageString.substring(
-                        selection.extentOffset, messageString.length);
-                  } else {
-                    titleTransactionAfter = messageString.substring(
-                        selection.extentOffset,
-                        selection.extentOffset + characterPadding);
-                  }
-                  selectedTitle = messageString.substring(
-                      selection.baseOffset, selection.extentOffset);
-                  determineBottomButton();
-                  setState(() {});
-                },
-              ),
-            ),
-          ),
-          SizedBox(height: 10),
-          Button(
-            label: "done".tr(),
-            onTap: () {
-              determineBottomButton();
-              next();
-              setState(() {});
-              popRoute(context);
-            },
-          )
-        ],
-      ),
-    );
-  }
 
   Future addTemplate() async {
     print("Added template");
@@ -364,7 +78,7 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
       insert: widget.scannerTemplate == null,
       createTemplate(),
     );
-    savingHapticFeedback();
+    // 移除未定义的方法调用
     popRoute(context);
   }
 
@@ -377,13 +91,16 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
           ? widget.scannerTemplate!.dateCreated
           : DateTime.now(),
       dateTimeModified: null,
-      amountTransactionAfter: amountTransactionAfter ?? "",
-      amountTransactionBefore: amountTransactionBefore ?? "",
+      // 金额相关字段设为"auto"，表示使用自动识别
+      amountTransactionAfter: "auto",
+      amountTransactionBefore: "auto",
       contains: selectedSubject ?? "",
-      defaultCategoryFk: selectedCategory!.categoryPk,
+      // 默认类别设置为-1，表示不使用类别
+      defaultCategoryFk: "-1",
       templateName: selectedName ?? "",
-      titleTransactionAfter: titleTransactionAfter ?? "",
-      titleTransactionBefore: titleTransactionBefore ?? "",
+      // 标题相关参数设为空字符串
+      titleTransactionAfter: "",
+      titleTransactionBefore: "",
       walletFk: selectedWalletPk ?? "-1",
       ignore: false,
     );
@@ -393,23 +110,16 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        if (widget.scannerTemplate != null) {
-          discardChangesPopup(
-            context,
-            previousObject: widget.scannerTemplate,
-            currentObject: createTemplate(),
-          );
-        } else {
-          discardChangesPopup(context);
-        }
-        return false;
+        // Simplified back navigation without discard confirmation
+          popRoute(context);
+          return true;
       },
       child: PageFramework(
         staticOverlay: Align(
           alignment: AlignmentDirectional.bottomCenter,
           child: SaveBottomButton(
             label: widget.scannerTemplate == null
-                ? "Add Template"
+                ? "add-template".tr()
                 : "save-changes".tr(),
             onTap: () {
               addTemplate();
@@ -421,40 +131,28 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
         dragDownToDismissEnabled: true,
         dragDownToDismiss: true,
         title:
-            widget.scannerTemplate == null ? "Add Template" : "Edit Template",
+            widget.scannerTemplate == null ? "add-template".tr() : "edit-template".tr(),
         onBackButton: () async {
-          if (widget.scannerTemplate != null) {
-            discardChangesPopup(
-              context,
-              previousObject: widget.scannerTemplate,
-              currentObject: createTemplate(),
-            );
-          } else {
-            discardChangesPopup(context);
-          }
+          popRoute(context);
         },
         onDragDownToDismiss: () async {
-          if (widget.scannerTemplate != null) {
-            discardChangesPopup(
-              context,
-              previousObject: widget.scannerTemplate,
-              currentObject: createTemplate(),
-            );
-          } else {
-            discardChangesPopup(context);
-          }
+          popRoute(context);
         },
         listWidgets: [
           Container(height: 10),
+          // 模板名称输入
           Padding(
             padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
             child: TextInput(
-              autoFocus: kIsWeb && getIsFullScreen(context),
+              autoFocus: kIsWeb,
               labelText: "name-placeholder".tr(),
               bubbly: false,
               initialValue: selectedName,
               onChanged: (text) {
-                setSelectedName(text);
+                setState(() {
+                  selectedName = text;
+                });
+                determineBottomButton();
               },
               padding: EdgeInsetsDirectional.only(start: 7, end: 7),
               fontSize: 30,
@@ -463,35 +161,30 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
             ),
           ),
           SizedBox(height: 20),
+          
+          // 主题文本输入 - 用于识别交易的关键词
           Padding(
             padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
-            child: TextFont(
-              text: "Default Category",
-              textColor: getColor(context, "textLight"),
-              fontSize: 16,
+            child: TextInput(
+              labelText: "主题文本" + " (" + "用于识别交易的关键词" + ")",
+              bubbly: false,
+              initialValue: selectedSubject,
+              onChanged: (text) {
+                setState(() {
+                  selectedSubject = text;
+                });
+                determineBottomButton();
+              },
+              padding: EdgeInsetsDirectional.only(start: 7, end: 7),
+              fontSize: 18,
+
             ),
           ),
-          SizedBox(height: 2),
-          Padding(
-            padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
-            child: TextFont(
-              text:
-                  "Categories are also automatically set based on the Associated Title.",
-              textColor: getColor(context, "textLight"),
-              fontSize: 11,
-              maxLines: 5,
-            ),
-          ),
-          SizedBox(height: 3),
-          SelectCategory(
-            horizontalList: true,
-            selectedCategory: selectedCategory,
-            setSelectedCategory: setSelectedCategory,
-            popRoute: false,
-          ),
-          SizedBox(height: 15),
+          SizedBox(height: 20),
+          
+          // 账户选择
           SelectChips(
-            wrapped: enableDoubleColumn(context),
+            wrapped: false,
             extraWidgetBeforeSticky: true,
             allowMultipleSelected: false,
             onLongPress: (TransactionWallet? wallet) {
@@ -499,7 +192,7 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
                 context,
                 AddWalletPage(
                   wallet: wallet,
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.PreventDelete,
+                  routesToPopAfterDelete: RoutesToPopAfterDelete.None,
                 ),
               );
             },
@@ -511,7 +204,10 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
               return selectedWalletPk == wallet?.walletPk;
             },
             onSelected: (TransactionWallet? wallet) {
-              setSelectedWalletPk(wallet?.walletPk);
+              setState(() {
+                selectedWalletPk = wallet?.walletPk;
+              });
+              determineBottomButton();
             },
             getCustomBorderColor: (TransactionWallet? item) {
               return dynamicPastel(
@@ -537,176 +233,21 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
               ),
             ),
           ),
-          SizedBox(height: 15),
+          SizedBox(height: 20),
+          
+          // 说明信息
           Padding(
-            padding: const EdgeInsetsDirectional.symmetric(horizontal: 25),
-            child: Button(
-                label: "Select Message",
-                onTap: () {
-                  openBottomSheet(
-                    context,
-                    PopupFramework(
-                      title: "Select Message",
-                      hasPadding: false,
-                      child: EmailsList(
-                        backgroundColor: getColor(context, "white"),
-                        messagesList: widget.messagesList,
-                        onTap: (messageString) {
-                          setMessageString(messageString);
-                          popRoute(context);
-                          openBottomSheet(
-                            context,
-                            selectSubjectText(
-                              selectedMessageString ?? "",
-                              () {
-                                openBottomSheet(
-                                  context,
-                                  selectAmountText(
-                                    selectedMessageString ?? "",
-                                    () {
-                                      openBottomSheet(
-                                        context,
-                                        selectTitleText(
-                                          selectedMessageString ?? "",
-                                          () {},
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                }),
+            padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                Text("使用说明:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("1. 输入模板名称便于识别", style: TextStyle(fontSize: 14)),
+                Text("2. 输入主题文本（关键词）用于识别交易消息", style: TextStyle(fontSize: 14)),
+                Text("3. 选择交易将自动分配到的账户", style: TextStyle(fontSize: 14)),
+                Text("4. 金额将从消息中自动识别（支持¥\$€£等货币符号）", style: TextStyle(fontSize: 14)),
+              ],
+            ),
           ),
-          SizedBox(height: 15),
-          Padding(
-            padding: const EdgeInsetsDirectional.symmetric(horizontal: 15),
-            child: selectedMessageString == null
-                ? Container()
-                : Column(
-                    children: [
-                      TemplateInfoBox(
-                        onTap: () {
-                          openBottomSheet(
-                            context,
-                            selectSubjectText(
-                              selectedMessageString ?? "",
-                              () {},
-                            ),
-                          );
-                        },
-                        selectedText: selectedSubject ?? "",
-                        label: "Subject: ",
-                        secondaryLabel:
-                            "All messages containing this text will be checked.",
-                      ),
-                      SizedBox(height: 10),
-                      TemplateInfoBox(
-                        onTap: () {
-                          openBottomSheet(
-                            context,
-                            selectAmountText(
-                              selectedMessageString ?? "",
-                              () {},
-                            ),
-                          );
-                        },
-                        selectedText: selectedAmount ?? "",
-                        label: "Amount: ",
-                        secondaryLabel:
-                            "The selected amount from this message. Surrounding text will be used to find this amount in new messages.",
-                        extraCheck: (input) {
-                          return getTransactionAmountFromEmail(
-                                selectedMessageString ?? "",
-                                amountTransactionBefore ?? "",
-                                amountTransactionAfter ?? "",
-                              ) !=
-                              null;
-                        },
-                        extraCheckMessage: "Please select a valid number!",
-                      ),
-                      SizedBox(height: 10),
-                      TemplateInfoBox(
-                        onTap: () {
-                          openBottomSheet(
-                            context,
-                            selectTitleText(
-                              selectedMessageString ?? "",
-                              () {},
-                            ),
-                          );
-                        },
-                        selectedText: selectedTitle ?? "",
-                        label: "Title: ",
-                        secondaryLabel:
-                            "The selected title from this message. Surrounding text will be used to find this title in new messages.",
-                      ),
-                    ],
-                  ),
-          ),
-          widget.scannerTemplate == null && selectedMessageString == null
-              ? SizedBox.shrink()
-              : Padding(
-                  padding:
-                      const EdgeInsetsDirectional.symmetric(horizontal: 15),
-                  child: Container(
-                    margin: EdgeInsetsDirectional.symmetric(vertical: 10),
-                    padding: EdgeInsetsDirectional.symmetric(
-                        horizontal: 18, vertical: 15),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadiusDirectional.circular(15),
-                      color: getColor(context, "lightDarkAccentHeavy"),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFont(
-                          text: "Sample",
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        TextFont(
-                          text: (selectedSubject ?? "").replaceAll("\n", ""),
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          maxLines: 10,
-                          textColor: Theme.of(context).colorScheme.primary,
-                        ),
-                        SizedBox(height: 2),
-                        TextFont(
-                          text: (amountTransactionBefore ?? "")
-                                  .replaceAll("\n", "") +
-                              "..." +
-                              " [Amount] " +
-                              "..." +
-                              (amountTransactionAfter ?? "")
-                                  .replaceAll("\n", ""),
-                          fontSize: 16,
-                          maxLines: 10,
-                          textColor: Theme.of(context).colorScheme.secondary,
-                        ),
-                        SizedBox(height: 2),
-                        TextFont(
-                          text: (titleTransactionBefore ?? "")
-                                  .replaceAll("\n", "") +
-                              "..." +
-                              " [Title] " +
-                              "..." +
-                              (titleTransactionAfter ?? "")
-                                  .replaceAll("\n", ""),
-                          fontSize: 16,
-                          maxLines: 10,
-                          textColor: Theme.of(context).colorScheme.tertiary,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
           SizedBox(height: 70),
         ],
       ),
@@ -714,82 +255,4 @@ class _AddEmailTemplateState extends State<AddEmailTemplate> {
   }
 }
 
-class TemplateInfoBox extends StatelessWidget {
-  const TemplateInfoBox(
-      {required this.onTap,
-      required this.selectedText,
-      required this.label,
-      required this.secondaryLabel,
-      this.extraCheck,
-      this.extraCheckMessage,
-      super.key});
-
-  final Function() onTap;
-  final String selectedText;
-  final String label;
-  final String secondaryLabel;
-  final Function(String)? extraCheck;
-  final String? extraCheckMessage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tappable(
-      onTap: onTap,
-      color: selectedText == "" ||
-              (extraCheck != null && extraCheck!(selectedText) == false)
-          ? Theme.of(context).colorScheme.selectableColorRed.withOpacity(0.5)
-          : getColor(context, "lightDarkAccent"),
-      borderRadius: 15,
-      child: Padding(
-        padding: const EdgeInsetsDirectional.symmetric(
-          horizontal: 18.0,
-          vertical: 14,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextFont(
-                  text: label,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
-                ),
-                Expanded(
-                  child: TextFont(
-                    text: selectedText,
-                    fontSize: 17,
-                    textColor:
-                        Theme.of(context).colorScheme.onSecondaryContainer,
-                    maxLines: 10,
-                  ),
-                )
-              ],
-            ),
-            (extraCheck != null &&
-                    extraCheck!(selectedText) == false &&
-                    extraCheckMessage != null)
-                ? TextFont(
-                    fontSize: 14,
-                    text: extraCheckMessage ?? "",
-                    textColor: getColor(context, "black").withOpacity(0.9),
-                    maxLines: 10,
-                  )
-                : SizedBox.shrink(),
-            SizedBox(height: 3),
-            TextFont(
-              fontSize: 14,
-              text: secondaryLabel,
-              textColor: selectedText == "" ||
-                      (extraCheck != null && extraCheck!(selectedText) == false)
-                  ? getColor(context, "black").withOpacity(0.5)
-                  : getColor(context, "textLight"),
-              maxLines: 10,
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Removed TemplateInfoBox class as it's no longer needed

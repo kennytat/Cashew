@@ -1,5 +1,5 @@
 import 'package:budget/colors.dart';
-import 'package:budget/database/generatePreviewData.dart';
+
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/homePageHeatmap.dart';
@@ -23,7 +23,6 @@ import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
-import 'package:budget/widgets/ratingPopup.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -257,7 +256,7 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 child: ListView(
                   controller: _scrollController,
                   children: [
-                    PreviewDemoWarning(),
+
                     if (useSmallBanner) SizedBox(height: 13),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -451,9 +450,7 @@ class _HomePageRatingBoxState extends State<HomePageRatingBox> {
       hidden = true;
     });
     updateSettings("openedStoreRating", true, updateGlobalState: true);
-    inAppReview.openStoreListing(
-      appStoreId: "6463662930",
-    );
+    // 移除应用商店评价功能
   }
 
   @override
@@ -468,87 +465,7 @@ class _HomePageRatingBoxState extends State<HomePageRatingBox> {
               key: ValueKey(2),
               padding: const EdgeInsetsDirectional.only(bottom: 13),
               child: Container(
-                padding: EdgeInsetsDirectional.only(
-                    start: 15, end: 15, bottom: 18, top: 18),
-                margin: EdgeInsetsDirectional.symmetric(horizontal: 13),
-                decoration: BoxDecoration(
-                  borderRadius:
-                      BorderRadiusDirectional.all(Radius.circular(15)),
-                  color: getColor(context, "lightDarkAccentHeavyLight"),
-                  boxShadow: boxShadowCheck(boxShadowGeneral(context)),
-                ),
-                child: Column(
-                  children: [
-                    TextFont(
-                      text: "enjoying-cashew-question".tr(),
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                    ),
-                    SizedBox(height: 7),
-                    Padding(
-                      padding:
-                          const EdgeInsetsDirectional.symmetric(horizontal: 10),
-                      child: TextFont(
-                        text: "consider-rating".tr(),
-                        fontSize: 16,
-                        textAlign: TextAlign.center,
-                        maxLines: 5,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    ScalingStars(
-                      selectedStars: 5,
-                      onTap: (i) {
-                        if (i >= 4) {
-                          open();
-                        } else {
-                          shareFeedback(
-                            "from-homepage-stars",
-                            "rating",
-                            selectedStars: i,
-                          );
-                          hide();
-                        }
-                      },
-                      size: 50,
-                      color: getColor(context, "starYellow"),
-                      loop: true,
-                      loopDelay: Duration(milliseconds: 1900),
-                    ),
-                    SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Opacity(
-                            opacity: 0.7,
-                            child: Button(
-                              label: "no-thanks".tr(),
-                              onTap: () {
-                                hide();
-                              },
-                              expandedLayout: true,
-                              color: Theme.of(context).colorScheme.tertiary,
-                              textColor:
-                                  Theme.of(context).colorScheme.onTertiary,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Button(
-                            label: "rate".tr(),
-                            onTap: () {
-                              open();
-                            },
-                            expandedLayout: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                // 移除评分请求框组件（评价功能已移除）
               ),
             ),
     );

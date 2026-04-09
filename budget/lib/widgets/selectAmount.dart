@@ -144,7 +144,8 @@ class _SelectAmountState extends State<SelectAmount> {
       print(e.toString());
     }
     amount = removeTrailingZeroes(amount);
-    if (amount == "0") {
+    // 不再将"0"设置为空字符串，以支持0.01等小金额
+    if (amount == "0" && !widget.allowZero) {
       amount = "";
     }
     // if (amount.endsWith(".0")) {
@@ -476,7 +477,7 @@ class _SelectAmountState extends State<SelectAmount> {
     if (includesOperations(amount, false)) {
       return true;
     } else if (amount.contains(".") &&
-        amount.split(".")[1].length >= getDecimals(listen: false)) {
+        amount.split(".")[1].length > 6) { // 增加允许的小数位数到6位
       return false;
     }
     return true;

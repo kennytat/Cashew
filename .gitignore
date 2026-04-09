@@ -1,2 +1,21 @@
-# Miscellaneous
+# Editor
 /.vscode/
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/build/
+
+# Android / Gradle
+**/.gradle/
+**/android/.gradle/
+**/android/local.properties
+**/android/captures/
+
+# Signing secrets
+**/android/key.properties
+upload-keystore.jks
+*.jks
+*.keystore

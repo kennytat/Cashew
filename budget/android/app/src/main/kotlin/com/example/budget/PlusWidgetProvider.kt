@@ -37,7 +37,7 @@ class PlusWidgetProvider : HomeWidgetProvider() {
                   val pendingIntentWithData = HomeWidgetLaunchIntent.getActivity(
                           context,
                           MainActivity::class.java,
-                          Uri.parse("addTransactionWidget"))
+                          Uri.parse("addTransactionIncomeWidget"))
                   setOnClickPendingIntent(R.id.widget_container, pendingIntentWithData)
                 }catch (e: Exception){}
 

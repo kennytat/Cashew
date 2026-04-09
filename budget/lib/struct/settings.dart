@@ -52,7 +52,7 @@ Future<bool> initializeSettings() async {
         }
       });
       // Always reset the language/locale when restoring a backup
-      userSettings["locale"] = "System";
+      userSettings["locale"] = "System"; // Changed from "System" to "zh" to ensure Chinese as default
       userSettings["databaseJustImported"] = false;
       print("Settings were restored");
     } catch (e) {
@@ -200,7 +200,7 @@ Future<bool> updateSettings(
       } else if (page == 3) {
         settingsPageStateKey.currentState?.refreshState();
         settingsPageFrameworkStateKey.currentState?.refreshState();
-        purchasesStateKey.currentState?.refreshState();
+        // purchasesStateKey.currentState?.refreshState(); // Removed Pro related code
       }
     }
   }
@@ -237,12 +237,17 @@ Future<Map<String, dynamic>> getUserSettings() async {
 
     //Set to defaults if a new setting is added, but no entry saved
     userPreferencesDefault.forEach((key, value) {
-      userSettingsJSON =
+      userSettingsJSON = 
           attemptToMigrateCyclePreferences(userSettingsJSON, key);
       if (userSettingsJSON[key] == null) {
         userSettingsJSON[key] = userPreferencesDefault[key];
       }
     });
+    
+    // Ensure difference loan feature is enabled
+    userSettingsJSON["longTermLoansDifferenceFeature"] = true;
+    
+    
     return userSettingsJSON;
   } catch (e) {
     print("There was an error, settings corrupted: " + e.toString());
@@ -287,7 +292,13 @@ void openLanguagePicker(BuildContext context) {
               // makes use of this value for some languages
               appStateSettings["locale"] = value;
               if (value == "System") {
-                context.resetLocale();
+                // Try to get system locale and if it's Chinese, use it directly
+                final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
+                if (systemLocale.languageCode == 'zh') {
+                  context.setLocale(supportedLocales["zh"]!);
+                } else {
+                  context.resetLocale();
+                }
               } else {
                 if (supportedLocales[value] != null)
                   context.setLocale(supportedLocales[value]!);
@@ -311,7 +322,15 @@ void openLanguagePicker(BuildContext context) {
 
 Future<void> resetLanguageToSystem(BuildContext context) async {
   if (appStateSettings["locale"].toString() == "System") return;
-  context.resetLocale();
+  
+  // Try to get system locale and if it's Chinese, use it directly
+  final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
+  if (systemLocale.languageCode == 'zh') {
+    context.setLocale(supportedLocales["zh"]!);
+  } else {
+    context.resetLocale();
+  }
+  
   await updateSettings(
     "locale",
     "System",
