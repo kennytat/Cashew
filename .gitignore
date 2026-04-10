@@ -19,3 +19,5 @@
 upload-keystore.jks
 *.jks
 *.keystore
+server/backups/
+server/cashew-sync

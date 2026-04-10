@@ -21,6 +21,12 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "syncEveryChange": kIsWeb,
     "devicesHaveBeenSynced": 1,
     "numBackups": 1,
+    // Server sync settings
+    "syncEnabled": false,
+    "syncServerUrl": "",
+    "syncOnOpen": true,
+    "syncOnClose": true,
+    "pendingSyncUpload": false,
     "theme": "system", //system, light, dark
     "use24HourFormat": "system", //system, 12-hour, 24-hour
     "numberCountUpAnimation": true,

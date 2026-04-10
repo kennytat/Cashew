@@ -1,0 +1,6 @@
+backups/
+cashew-sync
+Dockerfile
+docker-compose.yml
+.dockerignore
+.git

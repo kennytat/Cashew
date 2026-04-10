@@ -23,6 +23,7 @@ import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/struct/initializeNotifications.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/restartApp.dart';
+import 'package:budget/struct/sync/sync_service.dart';
 import 'package:budget/struct/customDelayedCurve.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -48,12 +49,16 @@ void main() async {
     await EasyLocalization.ensureInitialized();
     sharedPreferences = await SharedPreferences.getInstance();
     database = await constructDb('db');
-    notificationPayload = await initializeNotifications();
+    try {
+      notificationPayload = await initializeNotifications();
+    } catch (e) {
+      print("Notifications not supported on this platform: $e");
+    }
     entireAppLoaded = false;
     await loadCurrencyJSON();
     await loadLanguageNamesJSON();
     await initializeSettings();
-    
+
     // Ensure Chinese is set as default language if system is Chinese
     String? userSettings = sharedPreferences.getString('userSettings');
     if (userSettings == null) {
@@ -63,11 +68,15 @@ void main() async {
         await updateSettings("locale", "zh", updateGlobalState: false);
       }
     }
-    
+
     tz.initializeTimeZones();
-    final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-    final locationName = timezoneInfo.identifier;
-    tz.setLocalLocation(tz.getLocation(locationName));
+    try {
+      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+      final locationName = timezoneInfo.identifier;
+      tz.setLocalLocation(tz.getLocation(locationName));
+    } catch (e) {
+      print("FlutterTimezone not supported on this platform: $e");
+    }
     iconObjects.sort((a, b) => (a.mostLikelyCategoryName ?? a.icon)
         .compareTo((b.mostLikelyCategoryName ?? b.icon)));
     setHighRefreshRate();
@@ -160,6 +169,11 @@ class App extends StatelessWidget {
           updateGlobalAppLifecycleState: true,
           onAppResume: () async {
             await setHighRefreshRate();
+          },
+          onAppPaused: () async {
+            if (appStateSettings["syncEnabled"] == true) {
+              await SyncService.instance.syncOnClose();
+            }
           },
           child: InitializeNotificationService(
             child: InitializeBiometrics(

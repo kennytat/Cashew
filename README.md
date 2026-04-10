@@ -147,8 +147,8 @@ Changes and progress about development is all heavily documented in GitHub [comm
 
 ### ☁ Backup and Syncing
 
-- Cross-Device Sync: Keep budget data synchronized across all devices, ensuring access to financial information wherever you go.
-- Google Drive Backup: Safeguard budget data by utilizing Google Drive's backup functionality, allowing easy restoration of data if needed.
+- Cross-Device Sync: Keep budget data synchronized across all devices via a self-hosted sync server. Data is end-to-end encrypted with a user passphrase before leaving the device.
+- Local Backup: Export and import the full database as a `.sql` file for manual backup and restore.
 
 ### 💿 Smart Automation
 
@@ -160,6 +160,57 @@ Changes and progress about development is all heavily documented in GitHub [comm
 ## Automation
 
 See the `Automation` section on the FAQ website for information on how to add transactions automatically: https://cashewapp.web.app/faq.html#automation
+
+## Self-Hosted Sync Server
+
+Cashew includes a lightweight Go server for cross-device database sync. The server stores encrypted backups — it never sees your plaintext data.
+
+### How It Works
+
+1. You set a **passphrase** in the app (Settings > Backups > Cloud Sync)
+2. The passphrase derives two values using SHA-256 with different salts:
+   - A **backup ID** (used as the server-side filename)
+   - An **encryption key** (used for AES-256-GCM encryption, never sent to the server)
+3. On app open: the client checks the server for a newer backup and downloads it if needed
+4. On app close: the client uploads the local database if it's newer than the server copy
+
+### Running the Server
+
+```bash
+cd server
+
+# Option 1: Docker (recommended)
+docker compose up -d
+
+# Option 2: Build from source
+go build -o cashew-sync .
+./cashew-sync
+```
+
+The server listens on port **8085** by default. Configure with environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8085` | HTTP listen port |
+| `BACKUP_DIR` | `./backups` | Directory for encrypted backup files |
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/meta/{backupId}` | Check if a backup exists and its last modified time |
+| `POST` | `/upload/{backupId}` | Upload encrypted backup (requires `X-Timestamp` header) |
+| `GET` | `/download/{backupId}` | Download encrypted backup |
+| `GET` | `/health` | Health check |
+
+### Desktop Support
+
+The app supports **Linux**, **macOS**, and **Windows** desktop platforms in addition to Android, iOS, and web.
+
+```bash
+cd budget
+flutter run -d linux    # or macos, windows
+```
 
 ## Bundled Packages
 

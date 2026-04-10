@@ -27,7 +27,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:csv/csv.dart';
-import 'package:flutter_charset_detector/flutter_charset_detector.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -66,8 +65,11 @@ class _ImportCSVState extends State<ImportCSV> {
         } else {
           File file = File(result.files.single.path ?? "");
           Uint8List fileBytes = await file.readAsBytes();
-          DecodingResult decoded = await CharsetDetector.autoDecode(fileBytes);
-          csvString = decoded.string;
+          try {
+            csvString = utf8.decode(fileBytes);
+          } catch (_) {
+            csvString = latin1.decode(fileBytes);
+          }
         }
         // print(csvString);
         return csvString;

@@ -28,6 +28,8 @@ import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/defaultPreferences.dart';
+import 'package:budget/struct/sync/sync_service.dart';
+import 'package:budget/struct/sync/sync_models.dart';
 import 'package:budget/struct/navBarIconsData.dart';
 import 'package:budget/struct/quickActions.dart';
 import 'package:budget/struct/settings.dart';
@@ -298,18 +300,35 @@ bool runningCloudFunctions = false;
 bool errorSigningInDuringCloud = false;
 Future<bool> runAllCloudFunctions(BuildContext context,
     {bool forceSignIn = false}) async {
-  print("Skipping All Cloud Functions - Running in local mode");
   runningCloudFunctions = true;
   errorSigningInDuringCloud = false;
-  
-  // Skip all cloud functions for local-only use
-  // This includes: sync data, email scanning, cloud budgets, backups, exchange rates
-  
-  loadingIndeterminateKey.currentState?.setVisibility(false);
-  Future.delayed(Duration(milliseconds: 2000), () {
-    runningCloudFunctions = false;
-  });
-  errorSigningInDuringCloud = false;
+
+  final syncService = SyncService.instance;
+  if (!syncService.isConfigured) {
+    print("Sync not configured - running in local mode");
+    loadingIndeterminateKey.currentState?.setVisibility(false);
+    Future.delayed(Duration(milliseconds: 2000), () {
+      runningCloudFunctions = false;
+    });
+    return true;
+  }
+
+  loadingIndeterminateKey.currentState?.setVisibility(true);
+  try {
+    final result = await syncService.syncOnOpen();
+    print("Sync on open result: $result");
+    if (result == SyncResult.downloaded) {
+      restartAppPopup(context,
+          description: "Database synced from server. Restart required.");
+    }
+  } catch (e) {
+    print("Sync error: $e");
+  } finally {
+    loadingIndeterminateKey.currentState?.setVisibility(false);
+    Future.delayed(Duration(milliseconds: 2000), () {
+      runningCloudFunctions = false;
+    });
+  }
   return true;
 }
 

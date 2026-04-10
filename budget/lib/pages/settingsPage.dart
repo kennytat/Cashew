@@ -544,6 +544,8 @@ class SettingsPageContent extends StatelessWidget {
 
         SettingsHeader(title: "backups".tr()),
 
+        CloudSyncButton(),
+
         ExportDB(),
 
         ImportDB(),

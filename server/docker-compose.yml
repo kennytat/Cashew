@@ -1,0 +1,16 @@
+services:
+  cashew-sync:
+    build: .
+    image: cashew-sync:latest
+    container_name: cashew-sync
+    ports:
+      - "8085:8085"
+    volumes:
+      - sync-data:/data/backups
+    environment:
+      - PORT=8085
+      - BACKUP_DIR=/data/backups
+    restart: unless-stopped
+
+volumes:
+  sync-data:

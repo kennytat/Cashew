@@ -1,4 +1,5 @@
 import 'package:budget/functions.dart';
+import 'package:budget/pages/syncSetupPage.dart';
 import 'package:budget/widgets/exportCSV.dart';
 import 'package:budget/widgets/exportDB.dart';
 import 'package:budget/widgets/importDB.dart';
@@ -17,12 +18,34 @@ Future<void> exportToCSV(BuildContext context) async {
   );
 }
 
+class CloudSyncButton extends StatelessWidget {
+  const CloudSyncButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsContainer(
+      onTap: () {
+        pushRoute(context, const SyncSetupPage());
+      },
+      title: "Cloud Sync",
+      icon: Icons.cloud_sync_rounded,
+    );
+  }
+}
+
 class AccountAndBackup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 仅保留本地备份设置
+        SettingsContainerOutlined(
+          title: "Cloud Sync",
+          icon: Icons.cloud_sync_rounded,
+          isExpanded: false,
+          onTap: () {
+            pushRoute(context, const SyncSetupPage());
+          },
+        ),
         SettingsContainerOutlined(
           title: "local-backup".tr(),
           icon: Icons.download,
