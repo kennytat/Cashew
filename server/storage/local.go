@@ -27,7 +27,7 @@ func NewLocal(dir string) (*Local, error) {
 }
 
 func (l *Local) dataPath(backupId string) string {
-	return filepath.Join(l.Dir, backupId+".sql.gz")
+	return filepath.Join(l.Dir, backupId+".enc")
 }
 
 func (l *Local) metaPath(backupId string) string {

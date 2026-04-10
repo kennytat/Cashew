@@ -10,10 +10,12 @@ var validBackupId = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // ValidateBackupId extracts and validates the backupId from the URL path.
 // Expected path format: /prefix/{backupId}
 func ValidateBackupId(r *http.Request) (string, bool) {
-	// Last path segment is the backupId.
 	path := r.URL.Path
+	if len(path) < 65 {
+		return "", false
+	}
 	id := path[len(path)-64:]
-	if len(path) < 65 || !validBackupId.MatchString(id) {
+	if !validBackupId.MatchString(id) {
 		return "", false
 	}
 	return id, true
