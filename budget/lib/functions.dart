@@ -929,17 +929,14 @@ String pluralString(bool condition, String string) {
 bool lockAppWaitForRestart = false;
 void restartAppPopup(context,
     {String? subtitle, String? description, String? codeBlock}) async {
-  // For now, enforce this until better solution found
-  if (kIsWeb || true) {
-    // Lock the side navigation
+  if (kIsWeb) {
+    // Web cannot reopen the database in-process, ask user to refresh
     lockAppWaitForRestart = true;
     appStateKey.currentState?.refreshAppState();
 
     openPopup(
       context,
-      title: kIsWeb
-          ? "please-refresh-the-application".tr()
-          : "please-restart-the-application".tr(),
+      title: "please-refresh-the-application".tr(),
       description: description,
       subtitle: subtitle,
       descriptionWidget: codeBlock == null
@@ -952,10 +949,17 @@ void restartAppPopup(context,
           ? Icons.restart_alt_outlined
           : Icons.restart_alt_rounded,
       barrierDismissible: false,
-      // Show code widget with the name of the file monospace font
     );
   } else {
-    // Pop all routes, select home tab
+    // Close old database and reopen from the new file on disk
+    lockAppWaitForRestart = true;
+    appStateKey.currentState?.refreshAppState();
+    await database.close();
+    database = await constructDb('db');
+    await initializeSettings();
+    lockAppWaitForRestart = false;
+
+    // Rebuild entire widget tree and navigate to home
     RestartApp.restartApp(context);
     popAllRoutes(context);
     Future.delayed(Duration(milliseconds: 100), () {

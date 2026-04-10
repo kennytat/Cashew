@@ -9,7 +9,6 @@ import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
-import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -367,17 +366,39 @@ class _SyncSetupPageState extends State<SyncSetupPage> {
           ),
 
         if (_isSyncEnabled) ...[
-          SettingsContainerOutlined(
-            title: "Sync now",
-            icon: Icons.sync_rounded,
-            isExpanded: false,
-            onTap: _isConnecting ? null : _syncNow,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            child: ElevatedButton.icon(
+              onPressed: _isConnecting ? null : _syncNow,
+              icon: _isConnecting
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(Icons.sync_rounded),
+              label: Text(_isConnecting ? "Syncing..." : "Sync now"),
+              style: ElevatedButton.styleFrom(
+                minimumSize: Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
           ),
-          SettingsContainerOutlined(
-            title: "Disconnect",
-            icon: Icons.link_off_rounded,
-            isExpanded: false,
-            onTap: _disconnect,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            child: OutlinedButton.icon(
+              onPressed: _disconnect,
+              icon: Icon(Icons.link_off_rounded),
+              label: Text("Disconnect"),
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
           ),
         ],
 
