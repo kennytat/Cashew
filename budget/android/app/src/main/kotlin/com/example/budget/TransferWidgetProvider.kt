@@ -1,4 +1,4 @@
-package com.budget.tracker-app
+package com.budget.tracker
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

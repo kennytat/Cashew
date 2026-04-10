@@ -8,7 +8,7 @@
 PRODUCT_NAME = Cashew
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.budget.tracker-app
+PRODUCT_BUNDLE_IDENTIFIER = com.budget.tracker
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.budget. All rights reserved.

@@ -1,4 +1,4 @@
-package com.budget.tracker-app
+package com.budget.tracker
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -7,7 +7,7 @@ import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import java.util.Calendar
-import com.budget.tracker-app.MainActivity
+import com.budget.tracker.MainActivity
 import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider

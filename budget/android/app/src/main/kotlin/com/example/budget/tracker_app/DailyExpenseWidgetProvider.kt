@@ -1,11 +1,11 @@
-package com.budget.tracker-app
+package com.budget.tracker
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.widget.RemoteViews
-import com.budget.tracker-app.MainActivity
+import com.budget.tracker.MainActivity
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 

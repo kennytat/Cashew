@@ -68,7 +68,7 @@ Future<bool> requestReadNotificationPermission() async {
 
 onNotification(ServiceNotificationEvent event) async {
   // 过滤掉自己应用的通知，避免循环监听
-  if (event.packageName == "com.budget.tracker-app") return;
+  if (event.packageName == "com.budget.tracker") return;
 
   // 过滤掉已移除的通知，避免重复处理
   if (event.hasRemoved == true) return;
