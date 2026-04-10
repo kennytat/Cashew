@@ -1,4 +1,4 @@
-package com.budget.tracker_app
+package com.budget.tracker-app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

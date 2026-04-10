@@ -209,6 +209,7 @@ Future<bool> scheduleUpcomingTransactionsNotification(context) async {
     NotificationDetails notificationDetails = NotificationDetails(
       android: androidNotificationDetails,
       iOS: darwinNotificationDetails,
+      macOS: darwinNotificationDetails,
     );
     if (upcomingTransaction.dateCreated.isAfter(DateTime.now())) {
       await flutterLocalNotificationsPlugin.zonedSchedule(
@@ -293,10 +294,24 @@ Future<bool> checkNotificationsPermissionAndroid() async {
   return true;
 }
 
+Future<bool> checkNotificationsPermissionMacOS() async {
+  bool? result = await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          MacOSFlutterLocalNotificationsPlugin>()
+      ?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+  if (result != true) return false;
+  return true;
+}
+
 Future<bool> checkNotificationsPermissionAll() async {
   try {
     if (Platform.isAndroid) return await checkNotificationsPermissionAndroid();
     if (Platform.isIOS) return await checkNotificationsPermissionIOS();
+    if (Platform.isMacOS) return await checkNotificationsPermissionMacOS();
   } catch (e) {
     print("Error setting up notifications: " + e.toString());
     return false;

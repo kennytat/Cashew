@@ -28,6 +28,7 @@ Future<String?> initializeNotifications() async {
         InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
     );
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,

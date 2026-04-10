@@ -14,7 +14,7 @@ Future<FinanceDatabase> constructDb(String dbName,
     // put the database file, called db.sqlite here, into the documents folder
     // for your app.
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, dbName + '.sqlite'));
+    final file = File(p.join(dbFolder.path, 'Cashew', dbName + '.sqlite'));
     // return NativeDatabase(file);
     QueryExecutor foregroundExecutor = NativeDatabase(file);
     QueryExecutor backgroundExecutor = NativeDatabase.createInBackground(file);
@@ -28,7 +28,7 @@ Future<DBFileInfo> getCurrentDBFileInfo() async {
   late Stream<List<int>> mediaStream;
 
   final dbFolder = await getApplicationDocumentsDirectory();
-  final dbFile = File(p.join(dbFolder.path, 'db.sqlite'));
+  final dbFile = File(p.join(dbFolder.path, 'Cashew', 'db.sqlite'));
   //print("FILE SIZE:" + (dbFile.lengthSync() / 1e+6).toString());
   dbFileBytes = await dbFile.readAsBytes();
   mediaStream = Stream.value(List<int>.from(dbFileBytes));
@@ -38,7 +38,7 @@ Future<DBFileInfo> getCurrentDBFileInfo() async {
 
 Future overwriteDefaultDB(Uint8List dataStore) async {
   final dbFolder = await getApplicationDocumentsDirectory();
-  final dbFile = File(p.join(dbFolder.path, 'db.sqlite'));
+  final dbFile = File(p.join(dbFolder.path, 'Cashew', 'db.sqlite'));
   await dbFile.writeAsBytes(dataStore);
   // we need to be able to sync with others after the restore
   await sharedPreferences.setString("dateOfLastSyncedWithClient", "{}");

@@ -29,7 +29,7 @@ class SyncService {
   /// Get the local DB file's last modification time.
   Future<DateTime> _getLocalLastModified() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final dbFile = File(p.join(dbFolder.path, 'db.sqlite'));
+    final dbFile = File(p.join(dbFolder.path, 'Cashew', 'db.sqlite'));
     if (await dbFile.exists()) {
       return (await dbFile.stat()).modified.toUtc();
     }
@@ -39,7 +39,7 @@ class SyncService {
   /// Read the raw DB file bytes.
   Future<Uint8List> _getDbBytes() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final dbFile = File(p.join(dbFolder.path, 'db.sqlite'));
+    final dbFile = File(p.join(dbFolder.path, 'Cashew', 'db.sqlite'));
     return await dbFile.readAsBytes();
   }
 
@@ -47,9 +47,9 @@ class SyncService {
   Future<void> _savePreSyncBackup() async {
     try {
       final dbFolder = await getApplicationDocumentsDirectory();
-      final dbFile = File(p.join(dbFolder.path, 'db.sqlite'));
+      final dbFile = File(p.join(dbFolder.path, 'Cashew', 'db.sqlite'));
       final backupFile =
-          File(p.join(dbFolder.path, 'db_pre_sync_backup.sqlite'));
+          File(p.join(dbFolder.path, 'Cashew', 'db_pre_sync_backup.sqlite'));
       if (await dbFile.exists()) {
         await dbFile.copy(backupFile.path);
       }
@@ -98,10 +98,24 @@ class SyncService {
 
       // No remote backup exists — upload local.
       if (!meta.exists || meta.lastModified == null) {
-        return await _doUpload(backupId, passphrase, localLastModified);
+        final result = await _doUpload(backupId, passphrase, localLastModified);
+        if (result == SyncResult.uploaded) {
+          await _setInitialSyncCompleted();
+        }
+        return result;
       }
 
       final remoteTime = meta.lastModified!;
+
+      // First time syncing on this device — remote backup already exists,
+      // so download it instead of overwriting with the fresh local DB.
+      if (!hasCompletedInitialSync) {
+        final result = await _doDownload(backupId, passphrase);
+        if (result == SyncResult.downloaded) {
+          await _setInitialSyncCompleted();
+        }
+        return result;
+      }
 
       // Remote is newer — download.
       if (remoteTime.isAfter(localLastModified.add(Duration(seconds: 1)))) {
@@ -210,4 +224,23 @@ class SyncService {
 
   bool get hasPendingUpload =>
       appStateSettings["pendingSyncUpload"] == true;
+
+  bool get hasCompletedInitialSync =>
+      appStateSettings["hasCompletedInitialSync"] == true;
+
+  Future<void> _setInitialSyncCompleted() async {
+    await updateSettings("hasCompletedInitialSync", true,
+        pagesNeedingRefresh: [], updateGlobalState: false);
+  }
+
+  /// Mark initial sync as completed (e.g. when user chooses to upload).
+  Future<void> markInitialSyncCompleted() async {
+    await _setInitialSyncCompleted();
+  }
+
+  /// Reset so the next sync treats it as a fresh connection.
+  Future<void> resetInitialSync() async {
+    await updateSettings("hasCompletedInitialSync", false,
+        pagesNeedingRefresh: [], updateGlobalState: false);
+  }
 }

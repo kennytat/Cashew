@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.budget.tracker_app">
+    package="com.budget.tracker-app">
   <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
@@ -140,7 +140,7 @@
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/daily_expense_widget" />
         </receiver>
-        <receiver android:name="com.budget.tracker_app.MonthlyIncomeWidgetProvider"
+        <receiver android:name="com.budget.tracker-app.MonthlyIncomeWidgetProvider"
             android:exported="true" android:label="当月收入">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -148,7 +148,7 @@
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/monthly_income_widget" />
         </receiver>
-        <receiver android:name="com.budget.tracker_app.DailyIncomeWidgetProvider"
+        <receiver android:name="com.budget.tracker-app.DailyIncomeWidgetProvider"
             android:exported="true" android:label="当日收入">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

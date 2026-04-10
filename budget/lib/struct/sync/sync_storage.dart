@@ -3,7 +3,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SyncSecureStorage {
   static const _passphraseKey = 'cashew_sync_passphrase';
-  static final _storage = FlutterSecureStorage();
+  static final _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
+  );
 
   // In-memory cache (never persisted in plaintext).
   static String? _cachedBackupId;

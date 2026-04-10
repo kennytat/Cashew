@@ -152,10 +152,13 @@ class _SyncSetupPageState extends State<SyncSetupPage> {
     final syncService = SyncService.instance;
     SyncResult result;
     if (doDownload) {
-      // Force a download by calling syncOnOpen (remote is newer).
+      // New device joining existing backup — reset initial sync flag so
+      // syncOnOpen downloads the remote backup instead of uploading.
+      await syncService.resetInitialSync();
       result = await syncService.syncOnOpen();
     } else {
-      // Force an upload.
+      // Uploading local DB — mark initial sync as done immediately.
+      await syncService.markInitialSyncCompleted();
       result = await syncService.syncOnClose();
     }
 
@@ -195,6 +198,7 @@ class _SyncSetupPageState extends State<SyncSetupPage> {
     );
     if (confirmed == true) {
       await SyncSecureStorage.clearAll();
+      await SyncService.instance.resetInitialSync();
       await updateSettings("syncEnabled", false,
           pagesNeedingRefresh: [], updateGlobalState: true);
       await updateSettings("syncServerUrl", "",
